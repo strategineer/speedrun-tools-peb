@@ -75,13 +75,12 @@ namespace com.strategineer.PEBSpeedrunTools
         private static ConfigEntry<bool> _showDebugText;
         private static ConfigEntry<bool> _speedrunModeEnabled;
         // start text
-        private static bool _showStartUpText = false;
+        private static bool _gameLoaded = false;
 
         private static TextGUI _timerText = new TextGUI();
         private static TextGUI _debugText = new TextGUI();
         private static TextGUI _startupText = new TextGUI(TextAnchor.LowerCenter, Color.green, $"strategineer's Pig Eat Ball Speedrun Tools version {PluginInfo.PLUGIN_VERSION} loaded.");
         private static bool isTimerOn = false;
-        private static bool wasTimerEverOn = false;
 
         static void Log(string msg)
         {
@@ -94,11 +93,6 @@ namespace com.strategineer.PEBSpeedrunTools
             Log($"PatchStartTimer: {reason}");
             if (!isTimerOn)
             {
-                if(!wasTimerEverOn)
-                {
-                    _showStartUpText = false;
-                    wasTimerEverOn = true;
-                }
                 Log($"Starting timer because of {reason}");
                 isTimerOn = true;
                 stopWatch.Start();
@@ -212,14 +206,10 @@ namespace com.strategineer.PEBSpeedrunTools
             ///   when the menu changesThis starts the timer if we're on a pause menu and then we select a different button
             /// </summary>
             [HarmonyPostfix]
-            [HarmonyPatch(typeof(MenuStartGame), nameof(MenuStartGame.UpdateShutdown))]
-            static void PostfixMenuStartGameStartMenuLevel()
+            [HarmonyPatch(typeof(MenuStartGame), nameof(MenuStartGame.LoadContent))]
+            static void PostfixMenuStartGameLoadContent()
             {
-                
-                if(MidGame.staticMidGame.previewsLoaded >= 3 && MidGame.staticMidGame.optionsDataLoaded)
-                {
-                    _showStartUpText = true;
-                }
+                _gameLoaded = true;
             }
 
             /// <summary>
@@ -306,18 +296,21 @@ namespace com.strategineer.PEBSpeedrunTools
                 ts.Milliseconds / 10);
             }
 
-            if (_showTimer.Value)
+            if (_gameLoaded)
             {
-                _timerText.SetText(elapsedTime);
-                _timerText.Draw();
-            }
-            if (_showDebugText.Value)
-            {
-                _debugText.Draw();
-            }
-            if (_showStartUpText)
-            {
-                _startupText.Draw();
+                if (_showTimer.Value)
+                {
+                    _timerText.SetText(elapsedTime);
+                    _timerText.Draw();
+                }
+                if (_showDebugText.Value)
+                {
+                    _debugText.Draw();
+                }
+                if (ts.Seconds < 5)
+                {
+                    _startupText.Draw();
+                }
             }
         }
     }
