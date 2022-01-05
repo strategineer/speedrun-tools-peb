@@ -60,6 +60,7 @@ namespace com.strategineer.PEBSpeedrunTools
         private static ConfigEntry<TextAnchor> _timerPosition;
         private static ConfigEntry<TextAnchor> _debugMsgPosition;
         private static ConfigEntry<bool> _showTimer;
+        private static ConfigEntry<bool> _speedrunModeEnabled;
 
         const int MAX_STRING_SIZE = 499;
 
@@ -128,24 +129,72 @@ namespace com.strategineer.PEBSpeedrunTools
                 StopTimerIfNeeded(__originalMethod.Name);
             }
 
+            // todo skip clam start chats and skip the leaderboard/award section
+
+            [HarmonyPostfix]
+            //[HarmonyPatch(typeof(MenuSoloStart), nameof(MenuSoloStart.resetMenu))]
+            [HarmonyPatch(typeof(MenuClamTalkStart), nameof(MenuClamTalkStart.DoStartup))]
+            // this disables the normal idle chats, we don't care about that
+            //[HarmonyPatch(typeof(MenuCharTalkNoFace), nameof(MenuCharTalkNoFace.StartNewTalkExchange))]
+            //[HarmonyPatch(typeof(MenuCharacterTalkBase), nameof(MenuCharacterTalkBase.resetMenu))]
+            static void PostfixSkipClamTalk(ref MenuClamTalkStart __instance)
+            {
+                Log($"Skipping clam talk");
+                //MidGame.staticMidGame.setCurrentMenu(null);
+                //MidGame.staticMidGame.mapPlayerNew.PlayerTalkFinished();
+                // Mimic the StartPlayLevel function
+                //MidGame.mapHudObj.DeactivateTalkMenu(__instance);
+                //MidGame.staticMidGame.mapPlayerNew.ActivateTrailNode(___currentLevelIndex);
+                // Just skip the dialog and play the level
+                if (MidGame.staticMidGame.getCurrentMenu() is MenuClamTalkStart)
+                {
+                    __instance.callFunctionDelayed(13);
+                }
+                // todo skip the Play button on level start
+                // todo skip the leaderboard menu
+                // todo bug: because of this change, when we go back into a completed level the timer pauses during the item select screen
+            }
+
+
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(MenuWinScreen), nameof(MenuWinScreen.DoStartup))]
+            static void PostfixSkipWinScreen(ref MenuWinScreen __instance, ref int ___callButtonState, ref int ___currentState, ref float ___currentStateTime)
+            {
+                Log($"Skipping win screen with currennt state {__instance.currentState} and time {__instance.currentStateTime}");
+                // Just skip the win screen and play the next level or return to the world screen
+                // todo this almost works but when I get into the next screen I can't move
+                ___currentStateTime = 100000f;
+                ___currentState = 42;
+                __instance.callFunction( new GenericButtonActioner(0, 0));
+                
+            }
+
             [HarmonyPostfix]
             [HarmonyPatch(typeof(MidGame), nameof(MidGame.setCurrentMenu))]
-            static void PatchSetCurrentMenu(MenuBase ___pauseMenu, MenuBase ___startGameMenu, MenuBase ___pauseMenuInGame, MenuBase ___currentMenu)
+            static void PatchSetCurrentMenu(ref MidGame __instance, MenuBase ___pauseMenu, MenuBase ___startGameMenu, MenuBase ___pauseMenuInGame, ref MenuBase ___currentMenu)
             {
-                if(___currentMenu == ___startGameMenu)
+                // this might not be right place for this but we should disable the leaderboards if we're speedrunning
+                // todo add option for this
+                PigEatBallGame.staticThis.gameSettings.enableLeaderboards = false;
+                if (___currentMenu == ___startGameMenu)
                 {
                     // Initial game menu entered
                     // todo I can display info on my mod tools, saying that it's properly loaded here and then remove it
                     // when the menu changes
                     ResetTimer("Start game menu entered");
                 }
-                if(___currentMenu != null)
+                if(___currentMenu != null && ___currentMenu is not MenuClamTalkStart)
                 {
                     StopTimerIfNeeded("Menu/Dialog entered");
                 }
                 if(___currentMenu == null)
                 {
                     StartTimerIfNeeded("Menu/Dialog exited");
+                }
+                // todo check if this is a dialog and automatically skip it
+                if (___currentMenu == null)
+                {
+
                 }
             }
         }
@@ -169,6 +218,11 @@ namespace com.strategineer.PEBSpeedrunTools
                 "Show Timer",
                 true,
                 "Should show the speedrun timer?");
+
+            _speedrunModeEnabled = Config.Bind("Interface",
+                "Speedrun Mode Enabled",
+                true,
+                "Should we try to automatically skip any dialogs?");
         }
 
         private void Start()
