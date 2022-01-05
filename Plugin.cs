@@ -30,10 +30,10 @@ namespace com.strategineer.PEBSpeedrunTools
             _shadowRect.x += 3;
             _shadowRect.y += 3;
 
-            _style.fontSize = h / 40;
+            _style.fontSize = _shadowStyle.fontSize = h / 40;
             SetAnchor(anchor);
             SetColor(color);
-            SetColor(Color.black);
+            SetShadowColor(Color.black);
         }
 
         public void SetColor(Color color)
@@ -47,7 +47,7 @@ namespace com.strategineer.PEBSpeedrunTools
 
         public void SetAnchor(TextAnchor anchor)
         {
-            _style.alignment = anchor;
+            _style.alignment = _shadowStyle.alignment = anchor;
         }
 
         public void SetText(string text)
@@ -57,8 +57,8 @@ namespace com.strategineer.PEBSpeedrunTools
 
         public void Draw()
         {
-            GUI.Label(_rect, _text, _style);
             GUI.Label(_shadowRect, _text, _shadowStyle);
+            GUI.Label(_rect, _text, _style);
         }
     }
 
@@ -79,8 +79,9 @@ namespace com.strategineer.PEBSpeedrunTools
 
         private static TextGUI _timerText = new TextGUI();
         private static TextGUI _debugText = new TextGUI();
-        private static TextGUI _startupText = new TextGUI(TextAnchor.MiddleLeft, Color.white, $"strategineer's Pig Eat Ball Speedrun Tools version {PluginInfo.PLUGIN_VERSION} loaded.");
+        private static TextGUI _startupText = new TextGUI(TextAnchor.LowerCenter, Color.green, $"strategineer's Pig Eat Ball Speedrun Tools version {PluginInfo.PLUGIN_VERSION} loaded.");
         private static bool isTimerOn = false;
+        private static bool wasTimerEverOn = false;
 
         static void Log(string msg)
         {
@@ -93,9 +94,15 @@ namespace com.strategineer.PEBSpeedrunTools
             Log($"PatchStartTimer: {reason}");
             if (!isTimerOn)
             {
+                if(!wasTimerEverOn)
+                {
+                    _showStartUpText = false;
+                    wasTimerEverOn = true;
+                }
                 Log($"Starting timer because of {reason}");
                 isTimerOn = true;
                 stopWatch.Start();
+
             }
         }
         static void StopTimerIfNeeded(string reason)
@@ -118,15 +125,24 @@ namespace com.strategineer.PEBSpeedrunTools
         [HarmonyPatch]
         class Patch1
         {
+            /// <summary>
+            /// Start the timer after these functions execute.
+            /// 
+            /// todo I might not need all of these.
+            /// </summary>
             [HarmonyPostfix]
             [HarmonyPatch(typeof(LevelObj), nameof(LevelObj.MapLevelUnlockUpdate))]
             [HarmonyPatch(typeof(MidGame), nameof(MidGame.BeginFirstLevelFile))]
             [HarmonyPatch(typeof(MidGame), "FinishBeginMainGame")]
             [HarmonyPatch(typeof(LevelObj), nameof(LevelObj.Reset))]
-            static void PatchStartTimer(MethodBase __originalMethod)
+            static void PostfixStartTimer(MethodBase __originalMethod)
             {
                 StartTimerIfNeeded(__originalMethod.Name);
             }
+            
+            /// <summary>
+            /// Stop the timer before these functions execute
+            /// </summary>
             [HarmonyPrefix]
             [HarmonyPatch(typeof(MidGame), nameof(MidGame.StartTestLevelFromFile), new Type[] { typeof(LevelObj), typeof(string), typeof(string), typeof(string) })]
             static void PrefixStopTimer(MethodBase __originalMethod)
@@ -134,6 +150,10 @@ namespace com.strategineer.PEBSpeedrunTools
                 StopTimerIfNeeded(__originalMethod.Name);
             }
 
+
+            /// <summary>
+            /// Just skip talking to the clam and start playing the level right away
+            /// </summary>
             [HarmonyPostfix]
             [HarmonyPatch(typeof(MenuClamTalkStart), nameof(MenuClamTalkStart.DoStartup))]
             static void PostfixSkipClamTalk(ref MenuClamTalkStart __instance)
@@ -141,7 +161,6 @@ namespace com.strategineer.PEBSpeedrunTools
                 if (_speedrunModeEnabled.Value)
                 {
                     Log($"Skipping clam talk");
-                    // Just skip talking to the clam and start playing the level right away
                     if (MidGame.staticMidGame.getCurrentMenu() is MenuClamTalkStart)
                     {
                         __instance.callFunctionDelayed(13);
@@ -150,6 +169,10 @@ namespace com.strategineer.PEBSpeedrunTools
             }
 
 
+            /// <summary>
+            /// Just skip the win screen and play the next level or return to the world screen if we've beaten the level
+            ///   Otherwise, let's restart the current level
+            /// </summary>
             [HarmonyPostfix]
             [HarmonyPatch(typeof(MenuWinScreen), nameof(MenuWinScreen.DoStartup))]
             static void PostfixSkipWinScreen(ref MenuWinScreen __instance, bool ___singlePlayerFailure, ref int ___currentState, ref float ___currentStateTime)
@@ -157,8 +180,6 @@ namespace com.strategineer.PEBSpeedrunTools
                 if (_speedrunModeEnabled.Value)
                 {
                     Log("Skipping win screen");
-                    // Just skip the win screen and play the next level or return to the world screen if we've beaten the level
-                    // Otherwise, let's restart the current level
                     ___currentStateTime = 100000f;
                     ___currentState = 42;
                     var stateNumber = ___singlePlayerFailure ? 1 : 0;
@@ -166,21 +187,12 @@ namespace com.strategineer.PEBSpeedrunTools
                     __instance.callFunction(new GenericButtonActioner(stateNumber, 0));
                 }
             }
-            /* todo see if this is needed
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.setSubMenu))]
-            static void PostfixPigMenuSetSubMenu(ref PigMenu __instance, MenuBase ___currentSubMenu)
-            {
-                if (___currentSubMenu is MenuDisguises)
-                {
-                    StartTimerIfNeeded("Disguises Menu entered");
-                }
-            }
-            */
 
+            /// <summary>
+            /// This starts the timer if we're on a pause menu and then we select a different button
+            /// </summary>
             [HarmonyPostfix]
             [HarmonyPatch(typeof(MenuBase), nameof(MenuBase.setCurrentButton))]
-            // This starts the timer if we're on a pause menu and then we select a different button
             static void PostfixMenuPauseSetCurrentButton(MenuBase __instance, ButtonBase ___lastButton, ButtonBase ___currentButton)
             {
                 if (__instance is MenuPause || __instance is MenuPauseInGame)
@@ -195,26 +207,37 @@ namespace com.strategineer.PEBSpeedrunTools
                 }
             }
 
+            /// <summary>
+            /// display info on my mod tools, saying that it's properly loaded here and then remove it
+            ///   when the menu changesThis starts the timer if we're on a pause menu and then we select a different button
+            /// </summary>
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(MenuStartGame), nameof(MenuStartGame.UpdateShutdown))]
+            static void PostfixMenuStartGameStartMenuLevel()
+            {
+                
+                if(MidGame.staticMidGame.previewsLoaded >= 3 && MidGame.staticMidGame.optionsDataLoaded)
+                {
+                    _showStartUpText = true;
+                }
+            }
+
+            /// <summary>
+            /// Start and stop the timer when most menus are entered and when any menu is exited.
+            /// </summary>
             [HarmonyPostfix]
             [HarmonyPatch(typeof(MidGame), nameof(MidGame.setCurrentMenu))]
-            static void PatchSetCurrentMenu(ref MidGame __instance, MenuBase ___pauseMenu, MenuBase ___startGameMenu, MenuBase ___pauseMenuInGame, ref MenuBase ___currentMenu)
+            static void PatchMidGameSetCurrentMenu(ref MidGame __instance, MenuBase ___pauseMenu, MenuBase ___pauseMenuInGame, ref MenuBase ___currentMenu)
             {
                 // this might not be right place for this but we should disable the leaderboards if we're speedrunning
                 if (_speedrunModeEnabled.Value)
                 {
                     PigEatBallGame.staticThis.gameSettings.enableLeaderboards = false;
                 }
-                if (___currentMenu == ___startGameMenu)
-                {
-                    // Initial game menu entered
-                    // todo I can display info on my mod tools, saying that it's properly loaded here and then remove it
-                    // when the menu changes
-                    ResetTimer("Start game menu entered");
-                }
                 if(___currentMenu != null
-                    // this breaks our existing logic that skips these menus anyway
+                    // we skip these menus so ignore it
                     && ___currentMenu is not MenuClamTalkStart
-                    // we can use this to warp
+                    // we can use this to warp (relevant for the speedrun)
                     && ___currentMenu is not MenuPearls
                     // this is the menu that shows up when we launch into a level?
                     && ___currentMenu is not LevelStartScreen)

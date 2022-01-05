@@ -1,4 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+<Target Name="BuildPluginLaunchGame">
+  <Exec Command="dotnet build"></Exec>
+  <Exec Command="steam://rungameid/339090"></Exec>
+</Target>
 
   <PropertyGroup>
     <TargetFramework>net46</TargetFramework>
@@ -26,3 +30,4 @@
     </Reference>
   </ItemGroup>
 </Project>
+
