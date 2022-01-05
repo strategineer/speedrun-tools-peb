@@ -17,10 +17,12 @@ namespace com.strategineer.PEBSpeedrunTools
 
         const int MAX_STRING_SIZE = 499;
 
-        private static readonly GUIStyle _style = new GUIStyle();
-        private static Rect _screenRect;
+        private static readonly GUIStyle _textStyle = new GUIStyle();
+        private static readonly GUIStyle _textShadowStyle = new GUIStyle();
+        private static Rect _timerRect;
+        private static Rect _timerShadowRect;
         private const int ScreenOffset = 10;
-
+        private static bool isTimerOn = false;
         private static string _frameOutputText;
 
         private void Awake()
@@ -39,27 +41,47 @@ namespace com.strategineer.PEBSpeedrunTools
                 "Should show the speedrun timer?");
         }
 
+        private void StartTimer()
+        {
+            isTimerOn = true;
+            stopWatch.Start();
+        }
+        private void StopTimer()
+        {
+            stopWatch.Stop();
+            isTimerOn = false;
+        }
+
         void HandleUnityLog(object sender, UnityLogEventArgs e)
         {
-            if (e.Message.Contains("StartTestLevelFromFile, allocate newLevelObj:"))
+            // TODO(strategineer): can we ignore dialog? that doesn't appear in the logs...
+            if (e.Message.Contains("StartTestLevelFromFile, allocate newLevelObj:")
+                || e.Message.Contains("LeaderboardFindResult"))
             {
-                stopWatch.Stop();
-            } else if (e.Message.Contains("LevelObj::MapLevelUnlockUpdate end"))
+                StopTimer();
+            } else if (e.Message.Contains("LevelObj::MapLevelUnlockUpdate end")
+                || e.Message.Contains("Finished BeginMainGame")
+                || e.Message.Contains("BeginFirstLevelFile")
+                || e.Message.Contains("Level.Reset finished"))
             {
-                stopWatch.Start();
+                StartTimer();
             }
         }
 
         private static void updateLooks()
         {
-            _style.normal.textColor = Color.yellow;
-            _style.normal.background = Texture2D.blackTexture;
+
+            _textStyle.normal.textColor = isTimerOn ? Color.yellow : Color.green;
+            _textShadowStyle.normal.textColor = Color.black;
 
             int w = Screen.width, h = Screen.height;
-            _screenRect = new Rect(ScreenOffset, ScreenOffset, w - ScreenOffset * 2, h - ScreenOffset * 2);
+            _timerRect = new Rect(ScreenOffset, ScreenOffset, w - ScreenOffset * 2, h - ScreenOffset * 2);
+            _timerShadowRect = _timerRect;
+            _timerShadowRect.x += 3;
+            _timerShadowRect.y += 3;
 
-            _style.alignment = _position.Value;
-            _style.fontSize = h / 40;
+            _textStyle.alignment = _textShadowStyle.alignment = _position.Value;
+            _textStyle.fontSize = _textShadowStyle.fontSize = h / 40;
         }
 
         private void Update()
@@ -70,12 +92,22 @@ namespace com.strategineer.PEBSpeedrunTools
         private void displayTime()
         {
             TimeSpan ts = stopWatch.Elapsed;
-            // Format and display the TimeSpan value.
-            string elapsedTime = String.Format("{0:00}:{1:00}:{2:00}.{3:00}",
+            string elapsedTime;
+            if (ts.Hours > 0)
+            {
+                elapsedTime = String.Format("{0:00}:{1:00}:{2:00}.{3:00}",
                 ts.Hours, ts.Minutes, ts.Seconds,
                 ts.Milliseconds / 10);
+            } else
+            {
+                elapsedTime = String.Format("{0:00}:{1:00}.{2:00}",
+                ts.Minutes, ts.Seconds,
+                ts.Milliseconds / 10);
+            }
+            
             _frameOutputText = elapsedTime;
-            GUI.Label(_screenRect, _frameOutputText, _style);
+            GUI.Label(_timerShadowRect, _frameOutputText, _textShadowStyle);
+            GUI.Label(_timerRect, _frameOutputText, _textStyle);
         }
 
         private void OnGUI()
