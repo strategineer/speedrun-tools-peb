@@ -132,41 +132,28 @@ namespace com.strategineer.PEBSpeedrunTools
             // todo skip clam start chats and skip the leaderboard/award section
 
             [HarmonyPostfix]
-            //[HarmonyPatch(typeof(MenuSoloStart), nameof(MenuSoloStart.resetMenu))]
             [HarmonyPatch(typeof(MenuClamTalkStart), nameof(MenuClamTalkStart.DoStartup))]
-            // this disables the normal idle chats, we don't care about that
-            //[HarmonyPatch(typeof(MenuCharTalkNoFace), nameof(MenuCharTalkNoFace.StartNewTalkExchange))]
-            //[HarmonyPatch(typeof(MenuCharacterTalkBase), nameof(MenuCharacterTalkBase.resetMenu))]
             static void PostfixSkipClamTalk(ref MenuClamTalkStart __instance)
             {
-                Log($"Skipping clam talk");
-                //MidGame.staticMidGame.setCurrentMenu(null);
-                //MidGame.staticMidGame.mapPlayerNew.PlayerTalkFinished();
-                // Mimic the StartPlayLevel function
-                //MidGame.mapHudObj.DeactivateTalkMenu(__instance);
-                //MidGame.staticMidGame.mapPlayerNew.ActivateTrailNode(___currentLevelIndex);
-                // Just skip the dialog and play the level
-                if (MidGame.staticMidGame.getCurrentMenu() is MenuClamTalkStart)
+                if (_speedrunModeEnabled.Value)
                 {
                     __instance.callFunctionDelayed(13);
                 }
-                // todo skip the Play button on level start
-                // todo skip the leaderboard menu
-                // todo bug: because of this change, when we go back into a completed level the timer pauses during the item select screen
             }
 
 
             [HarmonyPostfix]
             [HarmonyPatch(typeof(MenuWinScreen), nameof(MenuWinScreen.DoStartup))]
-            static void PostfixSkipWinScreen(ref MenuWinScreen __instance, ref int ___callButtonState, ref int ___currentState, ref float ___currentStateTime)
+            static void PostfixSkipWinScreen(ref MenuWinScreen __instance, ref int ___currentState, ref float ___currentStateTime)
             {
-                Log($"Skipping win screen with currennt state {__instance.currentState} and time {__instance.currentStateTime}");
-                // Just skip the win screen and play the next level or return to the world screen
-                // todo this almost works but when I get into the next screen I can't move
-                ___currentStateTime = 100000f;
-                ___currentState = 42;
-                __instance.callFunction( new GenericButtonActioner(0, 0));
-                
+                if (_speedrunModeEnabled.Value)
+                {
+                    Log("Skipping win screen");
+                    // Just skip the win screen and play the next level or return to the world screen
+                    ___currentStateTime = 100000f;
+                    ___currentState = 42;
+                    __instance.callFunction(new GenericButtonActioner(0, 0));
+                }
             }
 
             [HarmonyPostfix]
@@ -175,7 +162,10 @@ namespace com.strategineer.PEBSpeedrunTools
             {
                 // this might not be right place for this but we should disable the leaderboards if we're speedrunning
                 // todo add option for this
-                PigEatBallGame.staticThis.gameSettings.enableLeaderboards = false;
+                if (_speedrunModeEnabled.Value)
+                {
+                    PigEatBallGame.staticThis.gameSettings.enableLeaderboards = false;
+                }
                 if (___currentMenu == ___startGameMenu)
                 {
                     // Initial game menu entered
@@ -191,11 +181,6 @@ namespace com.strategineer.PEBSpeedrunTools
                 {
                     StartTimerIfNeeded("Menu/Dialog exited");
                 }
-                // todo check if this is a dialog and automatically skip it
-                if (___currentMenu == null)
-                {
-
-                }
             }
         }
 
@@ -210,9 +195,9 @@ namespace com.strategineer.PEBSpeedrunTools
                 "Which corner of the screen to display the timer in.");
 
             _debugMsgPosition = Config.Bind("Interface",
-    "Debug Message position",
-    TextAnchor.LowerRight,
-    "Which corner of the screen to display the last debug message in.");
+                "Debug Message position",
+                TextAnchor.LowerRight,
+                "Which corner of the screen to display the last debug message in.");
 
             _showTimer = Config.Bind("Interface",
                 "Show Timer",
@@ -228,11 +213,6 @@ namespace com.strategineer.PEBSpeedrunTools
         private void Start()
         {
             h = Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
-            Logger.LogInfo("Patched following functions:");
-            foreach (MethodBase m in h.GetPatchedMethods())
-            {
-                Logger.LogInfo($"     {m.Name}");
-            }
         }
 
         static void HandleUnityLog(object sender, UnityLogEventArgs e)
