@@ -137,7 +137,13 @@ namespace com.strategineer.PEBSpeedrunTools
             {
                 if (_speedrunModeEnabled.Value)
                 {
-                    __instance.callFunctionDelayed(13);
+                    Log($"Skipping clam talk");
+                    // Just skip the clam talk and play the level
+                    if (MidGame.staticMidGame.getCurrentMenu() is MenuClamTalkStart)
+                    {
+                        __instance.callFunctionDelayed(13);
+                    }
+                    // todo bug: because of this change, when we go back into a completed level the timer pauses during the item select screen
                 }
             }
 
