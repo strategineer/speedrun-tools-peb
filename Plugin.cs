@@ -121,11 +121,8 @@ namespace com.strategineer.PEBSpeedrunTools
             }
             [HarmonyPrefix]
             [HarmonyPatch(typeof(MidGame), nameof(MidGame.StartTestLevelFromFile), new Type[] { typeof(LevelObj), typeof(string), typeof(string), typeof(string) })]
-            // todo(strat): replace this something else
-            [HarmonyPatch(typeof(SteamLeaderboardManager), "OnLeaderboardFindResult")]
-            static void PatchEndTimer(MethodBase __originalMethod)
+            static void PrefixStopTimer(MethodBase __originalMethod)
             {
-                // TODO(strategineer): can we ignore dialog?
                 StopTimerIfNeeded(__originalMethod.Name);
             }
 
@@ -163,11 +160,38 @@ namespace com.strategineer.PEBSpeedrunTools
             }
 
             [HarmonyPostfix]
+            [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.setSubMenu))]
+            static void PostfixPigMenuSetSubMenu(ref PigMenu __instance, MenuBase ___currentSubMenu)
+            {
+                if (___currentSubMenu is MenuDisguises)
+                {
+                    StartTimerIfNeeded("Disguises Menu entered");
+                }
+            }
+
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(MenuBase), nameof(MenuBase.setCurrentButton))]
+            // This starts the timer if we're on a pause menu and then we select a different button
+            // todo also figure out why the timer is paused when we enter into a clam level set
+            static void PostfixMenuPauseSetCurrentButton(MenuBase __instance, ButtonBase ___lastButton, ButtonBase ___currentButton)
+            {
+                if (__instance is MenuPause || __instance is MenuPauseInGame)
+                {
+                    if (!isTimerOn
+                        && ___lastButton != null
+                        && ___currentButton != null
+                        && ___lastButton != ___currentButton)
+                    {
+                        StartTimerIfNeeded("Movement detected in pause menu");
+                    }
+                }
+            }
+
+            [HarmonyPostfix]
             [HarmonyPatch(typeof(MidGame), nameof(MidGame.setCurrentMenu))]
             static void PatchSetCurrentMenu(ref MidGame __instance, MenuBase ___pauseMenu, MenuBase ___startGameMenu, MenuBase ___pauseMenuInGame, ref MenuBase ___currentMenu)
             {
                 // this might not be right place for this but we should disable the leaderboards if we're speedrunning
-                // todo add option for this
                 if (_speedrunModeEnabled.Value)
                 {
                     PigEatBallGame.staticThis.gameSettings.enableLeaderboards = false;
@@ -179,11 +203,12 @@ namespace com.strategineer.PEBSpeedrunTools
                     // when the menu changes
                     ResetTimer("Start game menu entered");
                 }
-                if(___currentMenu != null && ___currentMenu is not MenuClamTalkStart)
+                if(___currentMenu != null
+                    && ___currentMenu is not MenuClamTalkStart
+                    && ___currentMenu is not LevelStartScreen)
                 {
-                    StopTimerIfNeeded("Menu/Dialog entered");
-                }
-                if(___currentMenu == null)
+                    StopTimerIfNeeded($"Menu/Dialog entered {___currentMenu}");
+                } else
                 {
                     StartTimerIfNeeded("Menu/Dialog exited");
                 }
