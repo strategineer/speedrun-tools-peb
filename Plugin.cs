@@ -6,6 +6,8 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using System.Reflection;
 
+// todo figure out how to start the game world and give the player control faster than normal after the levelstartscreen
+// todo investigate timer situation, remove start timer events, or figure out how to make that cleaner (if possible)
 namespace com.strategineer.PEBSpeedrunTools
 {
     class TextGUI
@@ -82,6 +84,8 @@ namespace com.strategineer.PEBSpeedrunTools
         private static TextGUI _startupText = new TextGUI(TextAnchor.LowerCenter, Color.green, $"strategineer's Pig Eat Ball Speedrun Tools version {PluginInfo.PLUGIN_VERSION} loaded.");
         private static bool isTimerOn = false;
         private static bool _playerWantsToSkipLevelStart = false;
+        private static bool _playerWantsLevelStart = false;
+        private static Stopwatch _playerWantsLevelStartStopwatch = new Stopwatch();
         private static bool _levelStartSkipped = false;
         private static LevelStartScreen levelStartScreen;
         private static Stopwatch _playerWantsToSkipLevelStartStopwatch = new Stopwatch();
@@ -226,13 +230,13 @@ namespace com.strategineer.PEBSpeedrunTools
                     {
                         if (!_playerWantsToSkipLevelStart)
                         {
-                            if (Input.anyKey)
+                           if (_playerWantsLevelStart)
                             {
-                                Log("Player was holding a button when the LevelStartScreen popped up, let's assume they want to see it.");
+                                Log("Detected pre-buffered menu movement, don't skip level start menu.");
                             }
                             else
                             {
-                                Log("Player was not holding a button when the LevelStartScreen popped up, let's assume they want to skip it.");
+                                Log("No pre-buffered menu movement detected, skipping the level start menu.");
                                 _playerWantsToSkipLevelStart = true;
                                 levelStartScreen = __instance;
                             }
@@ -252,30 +256,12 @@ namespace com.strategineer.PEBSpeedrunTools
             [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.MenuDrawBackground))]
             [HarmonyPatch(typeof(LevelStartScreen), "UpdateBallView")]
             [HarmonyPatch(typeof(MenuWinScreen), nameof(MenuWinScreen.MenuDraw))]
-            static bool PatchSkipDrawingInGameMenus()
-            {
-                //todo there's other stuff I want to stop drawing 
-                return !_playerWantsToSkipLevelStart;
-            }
-
-            [HarmonyPrefix]
             [HarmonyPatch(typeof(MidGame), nameof(MidGame.SetFullScreenDark))]
-            static bool PatchSkipFullScreenDark()
-            {
-                return !_playerWantsToSkipLevelStart;
-            }
-
-
-
-            [HarmonyPrefix]
             [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.DrawDarkOverlay))]
-            static bool PatchLevelStartScreenDrawDarkOverlay(PigMenu __instance)
+            static bool PatchSkipDrawingInGameMenusWhenSkippingTheLevelStart()
             {
-                //todo there's other stuff I want to stop drawing
-                // maybe just remove this condition? see what happens?
                 return !_playerWantsToSkipLevelStart;
             }
-
 
             /// <summary>
             /// Start and stop the timer when most menus are entered and when any menu is exited.
@@ -354,6 +340,19 @@ namespace com.strategineer.PEBSpeedrunTools
                     levelStartScreen.SetState(251);
                     _levelStartSkipped = true;
                 }
+                if(_playerWantsLevelStartStopwatch.ElapsedMilliseconds > 500f)
+                {
+                    _playerWantsLevelStart = false;
+                    _playerWantsLevelStartStopwatch.Reset();
+                }
+                // todo and setup a configurable keyboard key for playing on kbm
+                // Hold dpad left or right and remember that for 500ms
+                if(Math.Abs(MidGame.staticMidGame.ActionMoveAxisX(0)) > 0.5f)
+                {
+                    _playerWantsLevelStart = true;
+                    _playerWantsLevelStartStopwatch.Restart();
+                }
+                    
             }
         }
 
