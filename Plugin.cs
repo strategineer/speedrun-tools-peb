@@ -93,6 +93,10 @@ namespace com.strategineer.PEBSpeedrunTools
         static void Log(string msg)
         {
             Console.WriteLine(msg);
+        }
+
+        static void Debug(string msg)
+        {
             _debugText.SetText(msg);
         }
 
@@ -239,6 +243,7 @@ namespace com.strategineer.PEBSpeedrunTools
                                 Log("No pre-buffered menu movement detected, skipping the level start menu.");
                                 _playerWantsToSkipLevelStart = true;
                                 levelStartScreen = __instance;
+                                
                             }
                         }
                     }
@@ -331,13 +336,14 @@ namespace com.strategineer.PEBSpeedrunTools
             h = Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
         }
         
+        
         private void Update()
         {
             if (_speedrunModeEnabled.Value)
             {
                 if (!_levelStartSkipped && _playerWantsToSkipLevelStart)
                 {
-                    levelStartScreen.SetState(251);
+                    levelStartScreen.SetState(LevelStartScreen.STATE_SHUTDOWN_PRE);
                     _levelStartSkipped = true;
                 }
                 if(_playerWantsLevelStartStopwatch.ElapsedMilliseconds > 500f)
