@@ -74,7 +74,7 @@ namespace com.strategineer.PEBSpeedrunTools
         private static ConfigEntry<bool> _showTimer;
         private static ConfigEntry<bool> _showDebugText;
         private static ConfigEntry<bool> _speedrunModeEnabled;
-        // start text
+
         private static bool _gameLoaded = false;
 
         private static TextGUI _timerText = new TextGUI();
@@ -82,10 +82,9 @@ namespace com.strategineer.PEBSpeedrunTools
         private static TextGUI _startupText = new TextGUI(TextAnchor.LowerCenter, Color.green, $"strategineer's Pig Eat Ball Speedrun Tools version {PluginInfo.PLUGIN_VERSION} loaded.");
         private static bool isTimerOn = false;
         private static bool _playerWantsToSkipLevelStart = false;
-        private static bool _playerHeldButton = false;
+        private static bool _levelStartSkipped = false;
+        private static LevelStartScreen levelStartScreen;
         private static Stopwatch _playerWantsToSkipLevelStartStopwatch = new Stopwatch();
-        private static Stopwatch _levelStartStopwatch = new Stopwatch();
-        private static MenuBase currentMenu;
 
         static void Log(string msg)
         {
@@ -217,6 +216,36 @@ namespace com.strategineer.PEBSpeedrunTools
                 _gameLoaded = true;
             }
 
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(LevelStartScreen), nameof(LevelStartScreen.SetState))]
+            static void PatchLevelStartScreenSetState(ref LevelStartScreen __instance)
+            {
+                if (_speedrunModeEnabled.Value)
+                {
+                    if (__instance.currentState == LevelStartScreen.STATE_START_UP)
+                    {
+                        if (!_playerWantsToSkipLevelStart)
+                        {
+                            if (Input.anyKey)
+                            {
+                                Log("Player was holding a button when the LevelStartScreen popped up, let's assume they want to see it.");
+                            }
+                            else
+                            {
+                                Log("Player was not holding a button when the LevelStartScreen popped up, let's assume they want to skip it.");
+                                _playerWantsToSkipLevelStart = true;
+                                levelStartScreen = __instance;
+                            }
+                        }
+                    }
+                    else if (__instance.currentState == LevelStartScreen.STATE_OFF)
+                    {
+                        _playerWantsToSkipLevelStartStopwatch.Reset();
+                        _playerWantsToSkipLevelStart = false;
+                        _levelStartSkipped = false;
+                    }
+                }
+            }
 
             [HarmonyPrefix]
             [HarmonyPatch(typeof(LevelStartScreen), nameof(LevelStartScreen.MenuDraw))]
@@ -226,17 +255,15 @@ namespace com.strategineer.PEBSpeedrunTools
                 return !_playerWantsToSkipLevelStart;
             }
 
+
+
             [HarmonyPrefix]
             [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.DrawDarkOverlay))]
             static bool PatchLevelStartScreenDrawDarkOverlay(PigMenu __instance)
             {
                 //todo there's other stuff I want to stop drawing
                 // maybe just remove this condition? see what happens?
-                if (__instance is LevelStartScreen)
-                {
-                    return !_playerWantsToSkipLevelStart;
-                }
-                return true;
+                return !_playerWantsToSkipLevelStart;
             }
 
 
@@ -247,13 +274,13 @@ namespace com.strategineer.PEBSpeedrunTools
             [HarmonyPatch(typeof(MidGame), nameof(MidGame.setCurrentMenu))]
             static void PatchMidGameSetCurrentMenu(ref MidGame __instance, MenuBase ___pauseMenu, MenuBase ___pauseMenuInGame, ref MenuBase ___currentMenu)
             {
-                currentMenu = ___currentMenu;
                 Log($"MidGame:SetCurrentMenu {___currentMenu}");
                 // this might not be right place for this but we should disable the leaderboards if we're speedrunning
                 if (_speedrunModeEnabled.Value)
                 {
                     PigEatBallGame.staticThis.gameSettings.enableLeaderboards = false;
                 }
+
                 if (___currentMenu != null
                     // we skip these menus so ignore it
                     && ___currentMenu is not MenuClamTalkStart
@@ -265,7 +292,6 @@ namespace com.strategineer.PEBSpeedrunTools
                     StopTimerIfNeeded($"Menu/Dialog entered {___currentMenu}");
                 } else
                 {
-                    _playerWantsToSkipLevelStart = false;
                     StartTimerIfNeeded("Menu/Dialog exited");
                 }
             }
@@ -308,64 +334,18 @@ namespace com.strategineer.PEBSpeedrunTools
         {
             h = Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly());
         }
-
-        // todo this code is a complete mess, let's reevaluate
-        // make it just a toggle in the config, displaying the state of the toggle at all times
-        // if the toggle is on, then skip the menus, otherwise don't skip the menus
-        // hopefully I can press a button (or a key worstcase) to flip the toggle...
-        // OR
-        // maybe this idea is ok, but the execution is off..
-        /*
+        
         private void Update()
         {
-            // After 2s, let's reset our variables/timers
-            if (_playerWantsToSkipLevelStart && _playerWantsToSkipLevelStartStopwatch.ElapsedMilliseconds > 2000f)
+            if (_speedrunModeEnabled.Value)
             {
-                _playerWantsToSkipLevelStartStopwatch.Reset();
-                _playerWantsToSkipLevelStart = false;
-                _playerHeldButton = false;
-            }
-            if (currentMenu is LevelStartScreen)
-            {
-                if (!_levelStartStopwatch.IsRunning)
+                if (!_levelStartSkipped && _playerWantsToSkipLevelStart)
                 {
-                    _levelStartStopwatch.Start();
-                }
-                const float MIN_CHECK_LIMIT_IN_MS = 25f;
-                const float MAX_CHECK_LIMIT_IN_MS = 200f;
-                if (_levelStartStopwatch.ElapsedMilliseconds >= MIN_CHECK_LIMIT_IN_MS && _levelStartStopwatch.ElapsedMilliseconds < MAX_CHECK_LIMIT_IN_MS)
-                {
-                    // Force player to hold a button within the first 1s of the menu appearing to not skip the menu, if they want to pick disguises/powerups if they want to
-
-                    // Reduce the input delay on the pre-start screen by just going right into the game unless the player holds a button
-                    // todo confirm that this works on controller (I'm pretty sure it does)
-                    // todo figure out if I can skip the input delay on moving the player at the start?
-                    if (Input.anyKey)
-                    {
-                        _playerHeldButton = true;
-                    }
-                }
-                if (_levelStartStopwatch.ElapsedMilliseconds >= MAX_CHECK_LIMIT_IN_MS)
-                {
-                    if (!_playerHeldButton && !_playerWantsToSkipLevelStart)
-                    {
-                        // todo add a visual indicator for this
-                        var m = currentMenu as LevelStartScreen;
-                        _playerWantsToSkipLevelStart = true;
-                        Log("Player didn't hold a button down, we're assuming that they want to skip the level start menu");
-                        _playerWantsToSkipLevelStartStopwatch.Start();
-                        m.SetState(251);
-                    }
-                }
-            } else
-            {
-                if (_levelStartStopwatch.IsRunning)
-                {
-                    _levelStartStopwatch.Reset();
+                    levelStartScreen.SetState(251);
+                    _levelStartSkipped = true;
                 }
             }
         }
-        */
 
         private void OnGUI()
         {
