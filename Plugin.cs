@@ -6,8 +6,8 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using System.Reflection;
 
-// todo figure out how to start the game world and give the player control faster than normal after the levelstartscreen
 // todo investigate timer situation, remove start timer events, or figure out how to make that cleaner (if possible)
+// todo game feels a little sluggish... do I have too many patches?
 namespace com.strategineer.PEBSpeedrunTools
 {
     class TextGUI
@@ -88,7 +88,6 @@ namespace com.strategineer.PEBSpeedrunTools
         private static Stopwatch _playerWantsLevelStartStopwatch = new Stopwatch();
         private static bool _levelStartSkipped = false;
         private static LevelStartScreen levelStartScreen;
-        private static Stopwatch _playerWantsToSkipLevelStartStopwatch = new Stopwatch();
 
         static void Log(string msg)
         {
@@ -249,7 +248,6 @@ namespace com.strategineer.PEBSpeedrunTools
                     }
                     else if (__instance.currentState == LevelStartScreen.STATE_OFF)
                     {
-                        _playerWantsToSkipLevelStartStopwatch.Reset();
                         _playerWantsToSkipLevelStart = false;
                         _levelStartSkipped = false;
                     }
@@ -258,14 +256,24 @@ namespace com.strategineer.PEBSpeedrunTools
 
             [HarmonyPrefix]
             [HarmonyPatch(typeof(LevelStartScreen), nameof(LevelStartScreen.MenuDraw))]
-            [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.MenuDrawBackground))]
             [HarmonyPatch(typeof(LevelStartScreen), "UpdateBallView")]
-            [HarmonyPatch(typeof(MenuWinScreen), nameof(MenuWinScreen.MenuDraw))]
-            [HarmonyPatch(typeof(MidGame), nameof(MidGame.SetFullScreenDark))]
+            [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.MenuDrawBackground))]
             [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.DrawDarkOverlay))]
-            static bool PatchSkipDrawingInGameMenusWhenSkippingTheLevelStart()
+            static bool PatchSkipDrawingInGameMenusWhenSkippingTheLevelStart(PigMenu __instance)
             {
+                if (__instance is MenuWinScreen)
+                {
+                    return false;
+                }
                 return !_playerWantsToSkipLevelStart;
+            }
+
+            [HarmonyPrefix]
+            [HarmonyPatch(typeof(MidGame), nameof(MidGame.SetFullScreenDark))]
+            [HarmonyPatch(typeof(MenuWinScreen), nameof(MenuWinScreen.MenuDraw))]
+            static bool PatchSkipDrawingInGameMenusWhenSkippingTheLevelStart2()
+            {
+                return false;
             }
 
             /// <summary>
