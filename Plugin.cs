@@ -249,9 +249,19 @@ namespace com.strategineer.PEBSpeedrunTools
 
             [HarmonyPrefix]
             [HarmonyPatch(typeof(LevelStartScreen), nameof(LevelStartScreen.MenuDraw))]
-            static bool PatchLevelStartScreenMenuDraw()
+            [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.MenuDrawBackground))]
+            [HarmonyPatch(typeof(LevelStartScreen), "UpdateBallView")]
+            [HarmonyPatch(typeof(MenuWinScreen), nameof(MenuWinScreen.MenuDraw))]
+            static bool PatchSkipDrawingInGameMenus()
             {
                 //todo there's other stuff I want to stop drawing 
+                return !_playerWantsToSkipLevelStart;
+            }
+
+            [HarmonyPrefix]
+            [HarmonyPatch(typeof(MidGame), nameof(MidGame.SetFullScreenDark))]
+            static bool PatchSkipFullScreenDark()
+            {
                 return !_playerWantsToSkipLevelStart;
             }
 
@@ -317,9 +327,9 @@ namespace com.strategineer.PEBSpeedrunTools
                 "Should show the speedrun timer?");
 
             _showDebugText = Config.Bind("Show/Hide",
-             "Show Debug Text",
-             false,
-             "Should show the debug text?");
+                "Show Debug Text",
+                false,
+                "Should show the debug text?");
 
             _speedrunModeEnabled = Config.Bind("Speedrun",
                 "Speedrun Mode Enabled",
