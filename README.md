@@ -13,6 +13,8 @@ If through some miracle you're reading this and you decide to speedrun this game
 
 ## What does this plugin do?
 
+*WARNING: I've yet to complete a full speedrun of the game using this plugin, for all I know it'll blow up right at the end of the game and prevent you from completing it. Use this plugin at your own risk.*
+
 - Adds an in-game timer that pauses during level loads (for more consistent runs between players using more or less powerful PCs).
 - Skips the clam talking menu and the medal/pearl award menus (avoids you having to mash and saves you a lot of time).
 - Turns off the Steam leaderboards (skips the delay that they add).
