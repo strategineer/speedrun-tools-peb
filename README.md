@@ -17,7 +17,7 @@ If through some miracle you're reading this and you decide to speedrun this game
 
 - Adds an in-game timer that stops during level loads and stops in the pause menu except when you're menuing (for more consistent runs between players using more or less powerful PCs and to allow you to take small health breaks during a long run).
 - Skips the clam talking menu and the medal/pearl award menus (avoids you having to mash and saves you a lot of time).
-- Turns off the Steam leaderboards (skips the delay that they add).
+- Turns off the Steam leaderboards (skips the delay that they add to a run).
 - Automatically skips the level start menu (avoids you having to mash and saves you a lot of time).
 	- If you want to use a powerup or change your disguise, you can press left/right on the DPAD (or a key defined in the config if you're playing on keyboard/mouse) to avoid skipping the menu.
 
