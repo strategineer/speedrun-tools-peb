@@ -79,6 +79,8 @@ namespace com.strategineer.PEBSpeedrunTools
     [HarmonyPatch]
     public class Plugin : BaseUnityPlugin
     {
+        const float FUZZ = 0.01f;
+        const float BUFFER_TO_PREVENT_LEVEL_START_MENU_SKIP_IN_MS = 1000f;
         private static Harmony h;
         private static Stopwatch speedrunTimer = new Stopwatch();
         private static ConfigEntry<KeyCode> _kbmKeyToNotSkipLevelStart;
@@ -404,16 +406,17 @@ namespace com.strategineer.PEBSpeedrunTools
             }
             if (!_levelStartSkipped && _playerWantsToSkipLevelStart)
             {
+                // todo it seems like this stops the camera from moving to the player on some levels... I might need to force that to happen
                 levelStartScreen.SetState(LevelStartScreen.STATE_SHUTDOWN_PRE);
                 _levelStartSkipped = true;
             }
-            if(_playerWantsLevelStartStopwatch.ElapsedMilliseconds > 500f)
+            // Press dpad left or right (or key on kbs) within 1000ms of menu opening to prevent skipping the level start menu (to pick a powerup/disguises)
+            if (_playerWantsLevelStartStopwatch.ElapsedMilliseconds > BUFFER_TO_PREVENT_LEVEL_START_MENU_SKIP_IN_MS)
             {
                 _playerWantsLevelStart = false;
                 _playerWantsLevelStartStopwatch.Reset();
             }
-            // Press dpad left or right (or key on kbs) within 500ms of menu opening to prevent skipping the level start menu (to pick a powerup/disguises)
-            if(Math.Abs(MidGame.staticMidGame.ActionMoveAxisX(0)) > 0.5f
+            if(Math.Abs(MidGame.staticMidGame.ActionMoveAxisX(0)) > FUZZ
                 || Input.GetKeyDown(_kbmKeyToNotSkipLevelStart.Value))
             {
                 _playerWantsLevelStart = true;
