@@ -100,6 +100,7 @@ namespace com.strategineer.PEBSpeedrunTools
         private static bool _levelStartSkipped = false;
         private static LevelStartScreen levelStartScreen;
         private static bool _movementDetectedOnPauseMenu = false;
+        private static bool _isWarpingBetweenLevels = false;
 
         static void Log(string msg)
         {
@@ -267,6 +268,21 @@ namespace com.strategineer.PEBSpeedrunTools
                 return false;
             }
 
+
+            [HarmonyPrefix]
+            [HarmonyPatch(typeof(Player), nameof(Player.InterLevelWarpStart))]
+            static void PrefixInterLevelWarpStart()
+            {
+                _isWarpingBetweenLevels = true;
+            }
+
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(InterLevelWarp), "FinishLevelWarp")]
+            static void PostfixInterLevelWarpFinish()
+            {
+                _isWarpingBetweenLevels = false;
+            }
+
             [HarmonyPrefix]
             [HarmonyPatch(typeof(MidGame), nameof(MidGame.setCurrentMenu))]
             static void PrefixMidGameSetCurrentMenu(MenuBase _menu, ref MidGame __instance, MenuBase ___pauseMenu, MenuBase ___pauseMenuInGame, ref MenuBase ___currentMenu)
@@ -379,7 +395,7 @@ namespace com.strategineer.PEBSpeedrunTools
         private void Update()
         {
             if (!_speedrunModeEnabled.Value) { return; }
-            if (CheckLevelGameplayRunning() || _movementDetectedOnPauseMenu)
+            if (!_isWarpingBetweenLevels && (CheckLevelGameplayRunning() || _movementDetectedOnPauseMenu))
             {
                 StartTimerIfNeeded(_movementDetectedOnPauseMenu ? "Movement on pause menu" : "Gameplay");
             } else
