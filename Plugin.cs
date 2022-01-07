@@ -6,10 +6,6 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using System.Reflection;
 
-// todo investigate timer situation, remove start timer events, or figure out how to make that cleaner (if possible)
-// todo game feels a little sluggish... do I have too many patches? too much logging? I need to test this 
-// maybe it's GC problem?
-// actually it's probably a bluetooth connectivity issue, try plugging in the controller
 namespace com.strategineer.PEBSpeedrunTools
 {
     class TextGUI
@@ -85,6 +81,7 @@ namespace com.strategineer.PEBSpeedrunTools
     {
         private static Harmony h;
         private static Stopwatch speedrunTimer = new Stopwatch();
+        private static ConfigEntry<KeyCode> _kbmKeyToNotSkipLevelStart;
         private static ConfigEntry<TextAnchor> _timerPosition;
         private static ConfigEntry<TextAnchor> _debugMsgPosition;
         private static ConfigEntry<bool> _showTimer;
@@ -259,11 +256,6 @@ namespace com.strategineer.PEBSpeedrunTools
             [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.DrawDarkOverlay))]
             static bool PatchSkipDrawingInGameMenusWhenSkippingTheLevelStart(PigMenu __instance)
             {
-                // todo this line is questionable and might be inneficient
-                if (__instance is MenuWinScreen)
-                {
-                    return false;
-                }
                 return !_playerWantsToSkipLevelStart;
             }
 
@@ -298,6 +290,13 @@ namespace com.strategineer.PEBSpeedrunTools
         private void Awake()
         {
             Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
+
+
+            _kbmKeyToNotSkipLevelStart = Config.Bind("Controls",
+                "Key to prevent utomatic level start menu skipping (for KBM only)",
+                KeyCode.Z,
+                "Keyboard Key to use to prevent the automatic skipping of the level start menu (allowing you to pick a disguise/powerup).");
+
 
             _timerPosition = Config.Bind("Interface",
                 "Timer position",
@@ -397,9 +396,9 @@ namespace com.strategineer.PEBSpeedrunTools
                 _playerWantsLevelStart = false;
                 _playerWantsLevelStartStopwatch.Reset();
             }
-            // todo and setup a configurable keyboard key for playing on kbm
-            // Hold dpad left or right and remember that for 500ms
-            if(Math.Abs(MidGame.staticMidGame.ActionMoveAxisX(0)) > 0.5f)
+            // Press dpad left or right (or key on kbs) within 500ms of menu opening to prevent skipping the level start menu (to pick a powerup/disguises)
+            if(Math.Abs(MidGame.staticMidGame.ActionMoveAxisX(0)) > 0.5f
+                || Input.GetKeyDown(_kbmKeyToNotSkipLevelStart.Value))
             {
                 _playerWantsLevelStart = true;
                 _playerWantsLevelStartStopwatch.Restart();
