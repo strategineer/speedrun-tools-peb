@@ -81,6 +81,7 @@ namespace com.strategineer.PEBSpeedrunTools
     {
         const float FUZZ = 0.01f;
         const float BUFFER_TO_PREVENT_LEVEL_START_MENU_SKIP_IN_MS = 1000f;
+
         private static Harmony h;
         private static Stopwatch speedrunTimer = new Stopwatch();
         private static ConfigEntry<KeyCode> _kbmKeyToNotSkipLevelStart;
@@ -162,7 +163,7 @@ namespace com.strategineer.PEBSpeedrunTools
                 }
             }
 
-
+            
             /// <summary>
             /// Just skip the win screen and play the next level or return to the world screen if we've beaten the level
             ///   Otherwise, let's restart the current level
@@ -305,6 +306,7 @@ namespace com.strategineer.PEBSpeedrunTools
             }
         }
 
+
         private void Awake()
         {
             Logger.LogInfo($"Plugin {PluginInfo.PLUGIN_GUID} is loaded!");
@@ -394,9 +396,92 @@ namespace com.strategineer.PEBSpeedrunTools
         }
 
 
+        private void CheckForCheats()
+        {
+            // Unlock everything
+            if (Input.GetKeyUp(KeyCode.F5))
+            {
+                Log("Unlocking everything");
+                MidGame.staticMidGame.UnlockAllBossSouvenirsCheat();
+                for (int i = 0; i < 38; ++i)
+                {
+                    MidGame.playerProgress.DisguiseSetAcquired(i, true);
+                }
+                MidGame.staticMidGame.SaveGameData();
+            }
+            // Load any world
+            int newWorldIndex = -1;
+            int functionIndex = -1;
+            if (Input.GetKeyUp(KeyCode.Alpha1))
+            {
+                newWorldIndex = 3;
+                functionIndex = 0;
+            }
+            else if (Input.GetKeyUp(KeyCode.Alpha2))
+            {
+                newWorldIndex = 2;
+                functionIndex = 1;
+            }
+            else if (Input.GetKeyUp(KeyCode.Alpha3))
+            {
+                newWorldIndex = 1;
+                functionIndex = 3;
+            }
+            else if (Input.GetKeyUp(KeyCode.Alpha4))
+            {
+                newWorldIndex = 4;
+                functionIndex = 4;
+            }
+            else if (Input.GetKeyUp(KeyCode.Alpha5))
+            {
+                newWorldIndex = 5;
+                functionIndex = 5;
+            }
+            else if (Input.GetKeyUp(KeyCode.Alpha6))
+            {
+                newWorldIndex = 7;
+                functionIndex = 6;
+            }
+            else if (Input.GetKeyUp(KeyCode.Alpha7))
+            {
+                newWorldIndex = 8;
+                functionIndex = 7;
+            }
+
+            if (newWorldIndex != -1)
+            {
+                string levName = MenuOptionsWorldCheat.worldLevelNames[functionIndex];
+                Log($"Loading a new world: {levName}");
+                MidGame.staticMidGame.LevelNodeBossSouvenirSet(1);
+                MidGame.staticMidGame.LevelNodeBossSouvenirSet(4);
+                MidGame.staticMidGame.LevelNodeBossSouvenirSet(5);
+                MidGame.staticMidGame.LevelNodeBossSouvenirSet(7);
+                MidGame.staticMidGame.SetPause(false);
+                MidGame.worldIndexMap = 0;
+                MidGame.areaIndexMap = 0;
+                MidGame.staticMidGame.loadingScreenFrontMenuStart = true;
+                MidGame.staticMidGame.loadingScreenWorldIndex = newWorldIndex;
+                MidGame.staticMidGame.Difficulty(3f);
+                MidGame.staticMidGame.publishTest = false;
+                MidGame.testLoadUsed = false;
+                MidGame.launchLevelType = MidGame.LAUNCH_TYPE.GAME;
+                MidGame.staticMidGame.mapDisguiseType = 0;
+                MidGame.staticMidGame.currentMapName = levName;
+                MenuFront.StartGame(1, false, true, new MidGame.OnFinishBeginningLoad(() =>
+                {
+                    float zoomTarget = PigGameBase.camera2D.zoomTarget;
+                    PigGameBase.camera2D.ZoomForce(0.5f);
+                    PigGameBase.camera2D.ZoomTarget(zoomTarget);
+                    MidGame.staticMidGame.Difficulty(3f);
+                }));
+                Log($"Finished loading a new world: {levName}");
+            }
+        }
+
         private void Update()
         {
             if (!_speedrunModeEnabled.Value) { return; }
+            CheckForCheats();
             if (!_isWarpingBetweenLevels && (CheckLevelGameplayRunning() || _movementDetectedOnPauseMenu))
             {
                 StartTimerIfNeeded(_movementDetectedOnPauseMenu ? "Movement on pause menu" : "Gameplay");

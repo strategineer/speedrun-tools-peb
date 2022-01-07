@@ -20,7 +20,9 @@ If through some miracle you're reading this and you decide to speedrun this game
 - Turns off the Steam leaderboards (skips the delay that they add to a run).
 - Automatically skips the level start menu (avoids you having to mash and saves you a lot of time).
 	- If you want to use a powerup or change your disguise for a level, you can press left/right on the DPAD (or a key defined in the config if you're playing on keyboard/mouse) before the menu would pop up to stop the plugin from skipping it.
-
+- Cheats:
+	- Use 1-7 alphanumeric keys to load into any world.
+	- Press F5 to unlock all disguises and gain access to any world through Tube Junction.
 ## How do I install this plugin?
 1. [Download the latest release](https://github.com/strategineer/speedrun-tools-peb/releases).
 2. Unzip the release so that the BepInEx folder is next to pigEatBallGame.exe.
