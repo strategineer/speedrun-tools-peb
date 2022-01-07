@@ -1,10 +1,9 @@
 # speedrun-tools-peb
 
-This is a mod/plugin for the obscure masterpiece that is [Pig Eat Ball](https://store.steampowered.com/app/339090/Pig_Eat_Ball/)
-to make speedrunning it feasible.
+This is a mod/plugin for the obscure masterpiece that is [Pig Eat Ball](https://store.steampowered.com/app/339090/Pig_Eat_Ball/).
 
-Trying to do a speedrun of the vanilla game would be really annoying given the lack of an in-game timer (that
-pauses during level loads, etc.) and the fact that it has a bunch of unskippable/useless menus.
+Trying to do a speedrun of the vanilla game would be really annoying given that it lacks an in-game timer and
+it has a bunch of unskippable/useless menus.
 
 Nobody's done a speedrun of Pig Eat Ball due to its hidden gemness and the many anti-speedrun features it has, so I built this plugin
 to make speedrunning it feasible and plan on being the first to try!
