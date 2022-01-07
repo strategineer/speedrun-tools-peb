@@ -12,7 +12,7 @@ to make speedrunning it feasible and plan on being the first to try!
 If through some miracle you're reading this and you decide to speedrun this game, here's how you can use this plugin too.
 
 
-## What does it this plugin do?
+## What does this plugin do?
 
 - Adds an in-game timer that pauses during level loads (for more consistent runs between players using more or less powerful PCs).
 - Skips the clam talking menu and the medal/pearl award menus (avoids you having to mash and saves you a lot of time).
