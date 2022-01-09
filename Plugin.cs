@@ -5,11 +5,18 @@ using UnityEngine;
 using BepInEx.Configuration;
 using HarmonyLib;
 using System.Reflection;
+using System.Collections.Generic;
 
 namespace com.strategineer.PEBSpeedrunTools
 {
-
-    enum STORY_STATE : int
+    enum DebugTarget : int
+    {
+        STORY_STATE,
+        TIMER_START,
+        TIMER_STOP,
+        TIMER_START_AND_STOP
+    }
+    enum StoryState : int
     {
         STORY_STATE_STARTED = 0,
         STORY_STATE_WORLD1_INTERLUDE = 5,
@@ -111,10 +118,10 @@ namespace com.strategineer.PEBSpeedrunTools
         private static Harmony _menuSkipsPatch = null;
 
         private static Stopwatch speedrunTimer = new Stopwatch();
-        private static ConfigEntry<KeyCode> _kbmKeyToNotSkipLevelStart;
         private static ConfigEntry<TextAnchor> _timerPosition;
         private static ConfigEntry<TextAnchor> _debugMsgPosition;
         private static ConfigEntry<bool> _showDebugText;
+        private static ConfigEntry<DebugTarget> _debugTarget;
 
         private static ConfigEntry<bool> _timerPatchEnabled;
         private static ConfigEntry<bool> _menuSkipsPatchEnabled;
@@ -123,31 +130,29 @@ namespace com.strategineer.PEBSpeedrunTools
         private static bool _gameLoaded = false;
 
         private static TextGUI _timerText = new TextGUI();
-        private static TextGUI _debugText = new TextGUI();
+        private static Dictionary<DebugTarget, TextGUI> _debugTexts = new Dictionary<DebugTarget, TextGUI>();
         private static TextGUI _startupText = new TextGUI(TextAnchor.LowerCenter, Color.grey, $"strategineer's Pig Eat Ball Speedrun Tools version {PluginInfo.PLUGIN_VERSION} loaded.");
-        private static bool _playerWantsToSkipLevelStart = false;
-        private static bool _playerWantsLevelStart = false;
         private static bool _gameStarted = false;
-        private static Stopwatch _playerWantsLevelStartStopwatch = new Stopwatch();
-        private static bool _levelStartSkipped = false;
-        private static LevelStartScreen levelStartScreen;
         private static bool _movementDetectedOnPauseMenu = false;
         private static bool _isWarpingBetweenLevels = false;
+        private static bool _isTalking = false;
 
         static void Log(string msg)
         {
             Console.WriteLine(msg);
         }
 
-        static void Debug(string msg)
+        static void Debug(DebugTarget target, string msg)
         {
-            _debugText.SetText(msg);
+            _debugTexts[target].SetText($"{Enum.GetName(typeof(DebugTarget), target)}: {msg}");
         }
 
         static void StartTimerIfNeeded(string reason)
         {
             if (!speedrunTimer.IsRunning && _gameStarted)
             {
+                Debug(DebugTarget.TIMER_START, reason);
+                Debug(DebugTarget.TIMER_START_AND_STOP, reason);                
                 Log($"Starting timer because of {reason}");
                 speedrunTimer.Start();
 
@@ -157,6 +162,8 @@ namespace com.strategineer.PEBSpeedrunTools
         {
             if (speedrunTimer.IsRunning && _gameStarted)
             {
+                Debug(DebugTarget.TIMER_STOP, reason);
+                Debug(DebugTarget.TIMER_START_AND_STOP, reason);
                 Log($"Stopping timer because of {reason}");
                 speedrunTimer.Stop();
             }
@@ -192,53 +199,6 @@ namespace com.strategineer.PEBSpeedrunTools
         [HarmonyPatch]
         class PatchMenuSkips
         {
-
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(LevelStartScreen), nameof(LevelStartScreen.SetState))]
-            static void PostfixLevelStartScreenSetState(ref LevelStartScreen __instance)
-            {
-                if (__instance.currentState == LevelStartScreen.STATE_SHOW)
-                {
-                    if (!_playerWantsToSkipLevelStart)
-                    {
-                        if (_playerWantsLevelStart)
-                        {
-                            Log("Detected pre-buffered menu movement, don't skip level start menu.");
-                        }
-                        else
-                        {
-                            Log("No pre-buffered menu movement detected, skipping the level start menu.");
-                            _playerWantsToSkipLevelStart = true;
-                            levelStartScreen = __instance;
-
-                        }
-                    }
-                }
-                else if (__instance.currentState == LevelStartScreen.STATE_OFF)
-                {
-                    _playerWantsToSkipLevelStart = false;
-                    _levelStartSkipped = false;
-                }
-            }
-
-            [HarmonyPrefix]
-            [HarmonyPatch(typeof(LevelStartScreen), nameof(LevelStartScreen.MenuDraw))]
-            [HarmonyPatch(typeof(LevelStartScreen), "UpdateBallView")]
-            [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.MenuDrawBackground))]
-            [HarmonyPatch(typeof(PigMenu), nameof(PigMenu.DrawDarkOverlay))]
-            static bool PrefixSkipDrawingInGameMenusWhenSkippingTheLevelStart(PigMenu __instance)
-            {
-                return !_playerWantsToSkipLevelStart;
-            }
-
-            [HarmonyPrefix]
-            [HarmonyPatch(typeof(MidGame), nameof(MidGame.SetFullScreenDark))]
-            [HarmonyPatch(typeof(MenuWinScreen), nameof(MenuWinScreen.MenuDraw))]
-            static bool PrefixSkipDrawingInGameMenusWhenSkippingTheLevelStart2()
-            {
-                return false;
-            }
-
 
             /// <summary>
             /// Just skip talking to the clam and start playing the level right away
@@ -289,7 +249,10 @@ namespace com.strategineer.PEBSpeedrunTools
             [HarmonyPatch(typeof(MenuBase), nameof(MenuBase.setCurrentButton))]
             static void PostfixMenuPauseSetCurrentButton(MenuBase __instance, ButtonBase ___lastButton, ButtonBase ___currentButton)
             {
-                if (__instance is MenuPause || __instance is MenuPauseInGame || __instance is MenuDisguises)
+                if (
+                    __instance is MenuPause
+                    || __instance is MenuPauseInGame
+                    || __instance is MenuDisguises)
                 {
                     if (!speedrunTimer.IsRunning
                         && ___lastButton != null
@@ -298,6 +261,16 @@ namespace com.strategineer.PEBSpeedrunTools
                     {
                         _movementDetectedOnPauseMenu = true;
                     }
+                }
+            }
+
+
+            [HarmonyPrefix]
+            [HarmonyPatch(typeof(LevelStartScreen), nameof(LevelStartScreen.MenuUpdate))]
+            static void PrefixLevelStartScreenDetectMovement(PigGameButton ___playButton, PigGameButton ___currentButton)
+            {
+                if (___playButton != ___currentButton) {
+                    _movementDetectedOnPauseMenu = true;
                 }
             }
 
@@ -331,10 +304,27 @@ namespace com.strategineer.PEBSpeedrunTools
             }
 
             [HarmonyPrefix]
-            [HarmonyPatch(typeof(MidGame), nameof(MidGame.setCurrentMenu))]
-            static void PrefixMidGameSetCurrentMenu(MenuBase _menu, ref MidGame __instance, MenuBase ___pauseMenu, MenuBase ___pauseMenuInGame, ref MenuBase ___currentMenu)
+            [HarmonyPatch(typeof(MenuCharacterTalkBase), "SetCharState")]
+            static void PrefixMenuCharacterTalkBaseSetCharState(int newState)
             {
-                if (___currentMenu == ___pauseMenu || ___currentMenu == ___pauseMenuInGame)
+                if(newState == MenuCharacterTalkBase.CHAR_STATE_START)
+                {
+                    _isTalking = true;
+                    StopTimerIfNeeded("We're talking!");
+                } else
+                {
+
+                    _isTalking = false;
+                }
+            }
+
+            [HarmonyPrefix]
+            [HarmonyPatch(typeof(MidGame), nameof(MidGame.setCurrentMenu))]
+            static void PrefixMidGameSetCurrentMenu(MenuBase _menu, ref MidGame __instance, MenuBase ___pauseMenu, MenuBase ___pauseMenuInGame, MenuBase ___startScreen, ref MenuBase ___currentMenu)
+            {
+                if (___currentMenu == ___pauseMenu
+                    || ___currentMenu == ___pauseMenuInGame
+                    || ___currentMenu == ___startScreen)
                 {
                     if( _menu != ___currentMenu)
                     {
@@ -402,24 +392,34 @@ namespace com.strategineer.PEBSpeedrunTools
             _showDebugText.SettingChanged += (sender, args) => UpdateTextUIs();
 
 
+            _debugTarget = Config.Bind("Features",
+                "Debug Target",
+                DebugTarget.STORY_STATE,
+                "What should be displaying as the debug text?");
 
-            _kbmKeyToNotSkipLevelStart = Config.Bind("Controls",
-                "Key to prevent utomatic level start menu skipping (for KBM only)",
-                KeyCode.Z,
-                "Keyboard Key to use to prevent the automatic skipping of the level start menu (allowing you to pick a disguise/powerup).");
+            _debugTarget.SettingChanged += (sender, args) => UpdateTextUIs();
 
         }
         private void Start()
         {
+            foreach (DebugTarget t in Enum.GetValues(typeof(DebugTarget)))
+            {
+                _debugTexts.Add(t, new TextGUI());
+                Debug(t, "");
+            }
             UpdatePatches();
             UpdateTextUIs();
         }
-        private void UpdateTextUIs()
+
+        private static void UpdateTextUIs()
         {
             if (_basicPatchEnabled.Value)
             {
-                _debugText.SetAnchor(_debugMsgPosition.Value);
-                _debugText.SetActive(_showDebugText.Value);
+                foreach(var d in _debugTexts)
+                {
+                    d.Value.SetAnchor(_debugMsgPosition.Value);
+                    d.Value.SetActive(_showDebugText.Value && d.Key == _debugTarget.Value);
+                }
             }
             if (_timerPatchEnabled.Value)
             {
@@ -563,45 +563,25 @@ namespace com.strategineer.PEBSpeedrunTools
 
         private void Update()
         {
-            // todo the disguise I have on keeps changing on its own when entering (maybe exiting too?) a level
             if (_basicPatchEnabled.Value)
             {
                 CheckForCheats();
                 if (MidGame.playerProgress != null)
                 {
-                    Debug($"Story state: {((STORY_STATE)MidGame.playerProgress.storyState).ToString()}");
+                    Debug(DebugTarget.STORY_STATE, $"{((StoryState)MidGame.playerProgress.storyState).ToString()}");
                 }
             }            
             if (_timerPatchEnabled.Value)
             {
-                if (!_isWarpingBetweenLevels && (CheckLevelGameplayRunning() || _movementDetectedOnPauseMenu))
+                if (!_isWarpingBetweenLevels 
+                    && !_isTalking
+                    && (CheckLevelGameplayRunning() || _movementDetectedOnPauseMenu))
                 {
                     StartTimerIfNeeded(_movementDetectedOnPauseMenu ? "Movement on pause menu" : "Gameplay");
                 }
                 else
                 {
                     StopTimerIfNeeded("No gameplay or movement on pause menu");
-                }
-            }
-            if (_menuSkipsPatchEnabled.Value)
-            {
-                if (!_levelStartSkipped && _playerWantsToSkipLevelStart)
-                {
-                    // todo it seems like this stops the camera from moving to the player on some levels... I might need to force that to happen
-                    levelStartScreen.SetState(LevelStartScreen.STATE_SHUTDOWN_PRE);
-                    _levelStartSkipped = true;
-                }
-                // Press dpad left or right (or key on kbs) within 1000ms of menu opening to prevent skipping the level start menu (to pick a powerup/disguises)
-                if (_playerWantsLevelStartStopwatch.ElapsedMilliseconds > BUFFER_TO_PREVENT_LEVEL_START_MENU_SKIP_IN_MS)
-                {
-                    _playerWantsLevelStart = false;
-                    _playerWantsLevelStartStopwatch.Reset();
-                }
-                if (Math.Abs(MidGame.staticMidGame.ActionMoveAxisX(0)) > FUZZ
-                    || Input.GetKeyDown(_kbmKeyToNotSkipLevelStart.Value))
-                {
-                    _playerWantsLevelStart = true;
-                    _playerWantsLevelStartStopwatch.Restart();
                 }
             }
         }
@@ -632,7 +612,11 @@ namespace com.strategineer.PEBSpeedrunTools
                 }
                 if (_basicPatchEnabled.Value)
                 {
-                    _debugText.Draw();
+                    // todo figure out a way to layout these so that they can be sorted and drawn at the same time
+                    foreach (var d in _debugTexts.Values)
+                    {
+                        d.Draw();
+                    }
                     if (ts.TotalSeconds < 5)
                     {
                         _startupText.Draw();
