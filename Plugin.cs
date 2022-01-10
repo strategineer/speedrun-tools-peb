@@ -575,7 +575,7 @@ namespace com.strategineer.PEBSpeedrunTools
 
             _menuSkipsPatchEnabled = Config.Bind("Features",
                 "Enable menu skipping feature",
-                true,
+                false,
                 "Should we try to automatically skip some menus/dialogs?");
 
             _menuSkipsPatchEnabled.SettingChanged += (sender, args) => UpdatePatches();
@@ -611,7 +611,7 @@ namespace com.strategineer.PEBSpeedrunTools
 
             _liveSplitServerAutoSplitterEnabled = Config.Bind("Splits",
                 "LiveSplit Server AutoSplits",
-                false,
+                true,
                 "Should the plugin autosplit your LiveSplit?");
 
             _liveSplitServerAutoSplitterEnabled.SettingChanged += (sender, args) => UpdateLiveSplitServerSettings();
