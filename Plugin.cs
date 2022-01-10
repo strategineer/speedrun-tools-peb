@@ -6,6 +6,9 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using System.Reflection;
 using System.Collections.Generic;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 
 namespace com.strategineer.PEBSpeedrunTools
 {
@@ -14,7 +17,8 @@ namespace com.strategineer.PEBSpeedrunTools
         STORY_STATE,
         TIMER_START,
         TIMER_STOP,
-        TIMER_START_AND_STOP
+        TIMER_START_AND_STOP,
+        LAST_AUTOSPLITTER_COMMAND
     }
     enum StoryState : int
     {
@@ -29,7 +33,7 @@ namespace com.strategineer.PEBSpeedrunTools
         STORY_STATE_WORLD3_COMPLETE = 30,
         STORY_STATE_WORLD4_STARTED = 32,
         STORY_STATE_WORLD4_INTERLUDE = 35,
-        STORY_STATE_WORLD4_COMPLETE = 40, 
+        STORY_STATE_WORLD4_COMPLETE = 40,
         STORY_STATE_WORLD5_STARTED = 42,
         STORY_STATE_WORLD5_INTERLUDE = 45,
         STORY_STATE_WORLD5_COMPLETE = 50,
@@ -39,6 +43,8 @@ namespace com.strategineer.PEBSpeedrunTools
         STORY_STATE_GAME_ENDING1 = 100,
         STORY_STATE_GAME_ENDING2 = 110
     }
+
+   
     class TextGUI
     {
         const int SCREEN_OFFSET = 10;
@@ -110,8 +116,153 @@ namespace com.strategineer.PEBSpeedrunTools
     [HarmonyPatch]
     public class Plugin : BaseUnityPlugin
     {
+        class AutoSplitter
+        {
+            // todo revaluate when the in-game timer should start and stop especially in menus (let's check with timo and speedrun.com, I'm sure people have discussed this)
+            // todo test special logic to stop the timer and end the run
+            // todo add code to set the story state artificially to test the last boss without playing through the whole game
+            // detect STORY_STATE_GAME_ENDING2
+            private Socket _socket;
+            private bool _hasStarted = false;
+            private bool _hasFinished = false;
+            public enum Command
+            {
+                START,
+                SPLIT,
+                PAUSE,
+                RESUME,
+                RESET,
+                INIT_GAMETIME,
+                PAUSE_GAMETIME,
+                UNPAUSE_GAMETIME
+            }
+
+            public void StartOrResume()
+            {
+                if (_hasFinished) return;
+                if(!_hasStarted)
+                {
+                    _hasStarted = true;
+                    Reset();
+                    SendCommand(Command.START);
+                    SendCommand(Command.INIT_GAMETIME);
+                } else
+                {
+                    UnpauseGametime();
+                }
+            }
+            public void FinishRun()
+            {
+                if (_hasFinished) return;
+                PauseGametime();
+                SendCommand(Command.PAUSE);
+                _hasFinished = true;
+
+            }
+            public void UnpauseGametime()
+            {
+                if (_hasFinished) return;
+                if (!_hasStarted) { return; }
+                SendCommand(Command.UNPAUSE_GAMETIME);
+            }
+
+            public void Split()
+            {
+                if (_hasFinished) return;
+                if (!_hasStarted) { return; }
+                SendCommand(Command.SPLIT);
+            }
+
+            public void PauseGametime()
+            {
+                if (_hasFinished) return;
+                if (!_hasStarted) { return; }
+                SendCommand(Command.PAUSE_GAMETIME);
+            }
+
+            public void Reset()
+            {
+                if (_hasFinished) return;
+                // todo I'm not sure this is working
+                SendCommand(Command.RESET);
+            }
+
+            public AutoSplitter(string ip, int port)
+            {
+                try
+                {
+                    _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                    IPAddress ipAdd = IPAddress.Parse(ip);
+                    IPEndPoint remoteEP = new IPEndPoint(ipAdd, port);
+                    _socket.Connect(remoteEP);
+                }
+                catch
+                {
+                    Log($"Can't create autosplitter with ip {ip} and port {port}");
+                    throw;
+                }
+            }
+            ~AutoSplitter()
+            {
+                if (_socket != null)
+                {
+                    _socket.Close();
+                    _socket = null;
+                }
+            }
+
+            private void SendCommand(Command command)
+            {
+                if (
+                    _socket == null
+                    || !_socket.Connected)
+                {
+                    Log("Could not send reset command to Live Split\nnot connected!");
+                    return;
+                }
+                Debug(DebugTarget.LAST_AUTOSPLITTER_COMMAND, $"{Enum.GetName(typeof(Command), command)}");
+                string msg;
+                switch (command)
+                {
+                    case Command.START:
+                        msg = "starttimer";
+                        break;
+                    case Command.SPLIT:
+                        msg = "split";
+                        break;
+                    case Command.PAUSE:
+                        msg = "pause";
+                        break;
+                    case Command.RESUME:
+                        msg = "resume";
+                        break;
+                    case Command.RESET:
+                        msg = "reset";
+                        break;
+                    case Command.INIT_GAMETIME:
+                        msg = "initgametime";
+                        break;
+                    case Command.PAUSE_GAMETIME:
+                        msg = "pausegametime";
+                        break;
+                    case Command.UNPAUSE_GAMETIME:
+                        msg = "unpausegametime";
+                        break;
+                    default:
+                        throw new Exception($"Missing command implementation {command}");
+                }
+                byte[] byData = Encoding.ASCII.GetBytes($"{msg}\r\n");
+                _socket.Send(byData);
+            }
+        }
+
         const float FUZZ = 0.01f;
         const float BUFFER_TO_PREVENT_LEVEL_START_MENU_SKIP_IN_MS = 1000f;
+        
+
+        private static AutoSplitter _autoSplitter;
+        private static HashSet<string> _enterClamSplits = new HashSet<string>();
+        private static HashSet<string> _exitClamSplits = new HashSet<string>();
 
         private static Harmony _basicPatch = null;
         private static Harmony _timerPatch = null;
@@ -122,6 +273,10 @@ namespace com.strategineer.PEBSpeedrunTools
         private static ConfigEntry<TextAnchor> _debugMsgPosition;
         private static ConfigEntry<bool> _showDebugText;
         private static ConfigEntry<DebugTarget> _debugTarget;
+
+        private static ConfigEntry<bool> _liveSplitServerAutoSplitterEnabled;
+        private static ConfigEntry<string> _liveSplitServerIP;
+        private static ConfigEntry<int> _liveSplitServerPort;
 
         private static ConfigEntry<bool> _timerPatchEnabled;
         private static ConfigEntry<bool> _menuSkipsPatchEnabled;
@@ -155,7 +310,7 @@ namespace com.strategineer.PEBSpeedrunTools
                 Debug(DebugTarget.TIMER_START_AND_STOP, reason);                
                 Log($"Starting timer because of {reason}");
                 speedrunTimer.Start();
-
+                _autoSplitter.StartOrResume();
             }
         }
         static void StopTimerIfNeeded(string reason)
@@ -166,12 +321,14 @@ namespace com.strategineer.PEBSpeedrunTools
                 Debug(DebugTarget.TIMER_START_AND_STOP, reason);
                 Log($"Stopping timer because of {reason}");
                 speedrunTimer.Stop();
+                _autoSplitter.PauseGametime();
             }
         }
         static void ResetTimer(string reason)
         {
             Log($"Resetting timer because of {reason}");
             speedrunTimer.Reset();
+            _autoSplitter.Reset();
         }
 
         [HarmonyPatch]
@@ -235,6 +392,44 @@ namespace com.strategineer.PEBSpeedrunTools
         [HarmonyPatch]
         class PatchInGameTimer
         {
+            /// <summary>
+            /// Split when we enter a clam for the first time.
+            /// </summary>
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(MenuClamTalkStart), "StartPlayLevel")]
+            static void PostfixClamTalkStartPlayLevel()
+            {
+                MapTouchObj lastTouchObj = MidGame.staticMidGame.mapPlayerNew.lastTouchObj;
+                string levelName = lastTouchObj.levelNodeNames[0];
+                if (!_enterClamSplits.Contains(levelName))
+                {
+                    _enterClamSplits.Add(levelName);
+                    _autoSplitter.Split();
+                }
+            }
+
+
+            /// <summary>
+            /// Split when we exit a clam having won the pearl inside for the first time.
+            /// </summary>
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(MenuWinScreen), nameof(MenuWinScreen.SetState))]
+            static void PostfixMenuWinScreen(int newState)
+            {
+                if (newState == MenuWinScreen.STATE_SHUTDOWN)
+                {
+                    MapTouchObj lastTouchObj = MidGame.staticMidGame.mapPlayerNew.lastTouchObj;
+                    string levelName = lastTouchObj.levelNodeNames[0];
+                    bool wonPearl = MidGame.staticMidGame.LevelNodePearlWon(levelName);
+                    if (wonPearl && !_exitClamSplits.Contains(levelName))
+                    {
+                        _exitClamSplits.Add(levelName);
+                        _autoSplitter.Split();
+                    }
+                }
+            }
+
+
             [HarmonyPostfix]
             [HarmonyPatch(typeof(MidGame), "FinishBeginMainGame")]
             static void PostfixMidGameFinishBeginMainGame()
@@ -333,8 +528,7 @@ namespace com.strategineer.PEBSpeedrunTools
                 }
                 if (_menu is MenuFront)
                 {
-                    StopTimerIfNeeded("Back to front menu");
-                    speedrunTimer.Reset();
+                    ResetTimer("Back to front menu");
                     _gameStarted = false;
                 }
             }
@@ -399,7 +593,50 @@ namespace com.strategineer.PEBSpeedrunTools
 
             _debugTarget.SettingChanged += (sender, args) => UpdateTextUIs();
 
+            _liveSplitServerAutoSplitterEnabled = Config.Bind("Splits",
+                "LiveSplit Server AutoSplits",
+                false,
+                "Should the plugin autosplit your LiveSplit?");
+
+            _liveSplitServerAutoSplitterEnabled.SettingChanged += (sender, args) => UpdateLiveSplitServerSettings();
+
+            _liveSplitServerIP = Config.Bind("Splits",
+                "LiveSplit Server IP",
+                "127.0.0.1",
+                "The IP of your LiveSplit Server (127.0.0.1 if you're running it on the same PC)");
+
+            _liveSplitServerIP.SettingChanged += (sender, args) => UpdateLiveSplitServerSettings();
+
+
+            _liveSplitServerPort = Config.Bind("Splits",
+                "LiveSplit Server Port",
+                16834,
+                "The Port of your LiveSplit Server (16834 by default)");
+
+            _liveSplitServerPort.SettingChanged += (sender, args) => UpdateLiveSplitServerSettings();
+
+            UpdateLiveSplitServerSettings();
+
         }
+
+
+        static void UpdateLiveSplitServerSettings()
+        {
+            if (!_liveSplitServerAutoSplitterEnabled.Value) {
+                _autoSplitter = null;
+                return;
+            }
+            try
+            {
+                _autoSplitter = new AutoSplitter(_liveSplitServerIP.Value, _liveSplitServerPort.Value);
+            }
+            catch
+            {
+                // todo add error message displayed on screen for users
+                Log($"Could not connect to Live Split server using IP {_liveSplitServerIP.Value} and port {_liveSplitServerPort.Value}");
+            }
+        }
+
         private void Start()
         {
             foreach (DebugTarget t in Enum.GetValues(typeof(DebugTarget)))
@@ -568,6 +805,10 @@ namespace com.strategineer.PEBSpeedrunTools
                 CheckForCheats();
                 if (MidGame.playerProgress != null)
                 {
+                    if (MidGame.playerProgress.storyState == (int)StoryState.STORY_STATE_GAME_ENDING2)
+                    {
+                        _autoSplitter.FinishRun();
+                    }
                     Debug(DebugTarget.STORY_STATE, $"{((StoryState)MidGame.playerProgress.storyState).ToString()}");
                 }
             }            
