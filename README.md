@@ -23,8 +23,8 @@ If through some miracle you're reading this and you decide to speedrun this game
 ## How do I install this plugin?
 1. [Download the latest release of this plugin](https://github.com/strategineer/speedrun-tools-peb/releases).
 2. Unzip into the game directory so that the BepInEx folder so that is next to pigEatBallGame.exe.
-3. [Download the latest release of the LiveSplit Server component](https://github.com/LiveSplit/LiveSplit.Server/releases)
+3. [Download the latest release of the LiveSplit Server component](https://github.com/LiveSplit/LiveSplit.Server/releases).
 4. Unzip the file and move the .dll files into the Components folder in your LiveSplit install.
 5. Open the PigEatBall.lss splits file in LiveSplit.
-5. Play Pig Eat Ball and enjoy the auto splitter (You can click on LiveSplit, select 'Compare Against' -> Game Time to see the in-game timer)
+5. Play Pig Eat Ball and enjoy the auto splitter (You can right-click on LiveSplit, select 'Compare Against' -> 'Game Time' to use the in-game timer)
 6. [Optional] Press F1 to open an in-game config UI to change settings (mostly to turn the plugin on/off).
