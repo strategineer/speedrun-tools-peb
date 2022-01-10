@@ -14,11 +14,13 @@ namespace com.strategineer.PEBSpeedrunTools
 {
     enum DebugTarget : int
     {
+        GENERAL,
         STORY_STATE,
         TIMER_START,
         TIMER_STOP,
         TIMER_START_AND_STOP,
-        LAST_AUTOSPLITTER_COMMAND
+        LAST_AUTOSPLITTER_COMMAND,
+        STORY_MOVIE_PLAYING
     }
     enum StoryState : int
     {
@@ -135,6 +137,16 @@ namespace com.strategineer.PEBSpeedrunTools
                 INIT_GAMETIME,
                 PAUSE_GAMETIME,
                 UNPAUSE_GAMETIME
+            }
+
+            public bool IsStarted()
+            {
+                return _hasStarted;
+            }
+
+            public bool IsFinished()
+            {
+                return _hasFinished;
             }
 
             public void StartOrResume()
@@ -288,9 +300,10 @@ namespace com.strategineer.PEBSpeedrunTools
         private static Dictionary<DebugTarget, TextGUI> _debugTexts = new Dictionary<DebugTarget, TextGUI>();
         private static TextGUI _startupText = new TextGUI(TextAnchor.LowerCenter, Color.grey, $"strategineer's Pig Eat Ball Speedrun Tools version {PluginInfo.PLUGIN_VERSION} loaded.");
         private static bool _gameStarted = false;
-        private static bool _movementDetectedOnPauseMenu = false;
+        private static bool _overrideMenuTimerPaused = false;
         private static bool _isWarpingBetweenLevels = false;
         private static bool _isTalking = false;
+        private static bool _idleOnLevelStartScreen = false;
 
         static void Log(string msg)
         {
@@ -454,18 +467,22 @@ namespace com.strategineer.PEBSpeedrunTools
                         && ___currentButton != null
                         && ___lastButton != ___currentButton)
                     {
-                        _movementDetectedOnPauseMenu = true;
+                        _overrideMenuTimerPaused = true;
                     }
                 }
             }
 
 
-            [HarmonyPrefix]
-            [HarmonyPatch(typeof(LevelStartScreen), nameof(LevelStartScreen.MenuUpdate))]
-            static void PrefixLevelStartScreenDetectMovement(PigGameButton ___playButton, PigGameButton ___currentButton)
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(LevelStartScreen), nameof(LevelStartScreen.SetState))]
+            static void PrefixLevelStartScreenDetectMovement(int newState)
             {
-                if (___playButton != ___currentButton) {
-                    _movementDetectedOnPauseMenu = true;
+                if (newState == LevelStartScreen.STATE_SHOW_IDLE)
+                {
+                    _idleOnLevelStartScreen = true;
+                } else if(newState == LevelStartScreen.STATE_SHUTDOWN)
+                {
+                    _idleOnLevelStartScreen = false;
                 }
             }
 
@@ -480,7 +497,7 @@ namespace com.strategineer.PEBSpeedrunTools
                     && __instance is MenuPause
                     && nextMenu is MenuDisguises)
                 {
-                    _movementDetectedOnPauseMenu = true;    
+                    _overrideMenuTimerPaused = true;    
                 }
             }
 
@@ -518,12 +535,11 @@ namespace com.strategineer.PEBSpeedrunTools
             static void PrefixMidGameSetCurrentMenu(MenuBase _menu, ref MidGame __instance, MenuBase ___pauseMenu, MenuBase ___pauseMenuInGame, MenuBase ___startScreen, ref MenuBase ___currentMenu)
             {
                 if (___currentMenu == ___pauseMenu
-                    || ___currentMenu == ___pauseMenuInGame
-                    || ___currentMenu == ___startScreen)
+                    || ___currentMenu == ___pauseMenuInGame)
                 {
                     if( _menu != ___currentMenu)
                     {
-                        _movementDetectedOnPauseMenu = false;
+                        _overrideMenuTimerPaused = false;
                     }
                 }
                 if (_menu is MenuFront)
@@ -814,15 +830,17 @@ namespace com.strategineer.PEBSpeedrunTools
             }            
             if (_timerPatchEnabled.Value)
             {
-                if (!_isWarpingBetweenLevels 
+                if (_idleOnLevelStartScreen
+                    || (!_isWarpingBetweenLevels
                     && !_isTalking
-                    && (CheckLevelGameplayRunning() || _movementDetectedOnPauseMenu))
+                    && (CheckLevelGameplayRunning() || _overrideMenuTimerPaused)
+                    ))
                 {
-                    StartTimerIfNeeded(_movementDetectedOnPauseMenu ? "Movement on pause menu" : "Gameplay");
+                    StartTimerIfNeeded("Starting timer");
                 }
                 else
                 {
-                    StopTimerIfNeeded("No gameplay or movement on pause menu");
+                    StopTimerIfNeeded("Stopping timer");
                 }
             }
         }
@@ -832,7 +850,7 @@ namespace com.strategineer.PEBSpeedrunTools
             if (_gameLoaded)
             {
                 TimeSpan ts = speedrunTimer.Elapsed;
-                if (_timerPatchEnabled.Value)
+                if (_autoSplitter.IsFinished())
                 {
                     string elapsedTime;
                     if (ts.Hours > 0)
