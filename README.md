@@ -1,6 +1,6 @@
 # speedrun-tools-peb
 
-This is a mod/plugin for the obscure masterpiece that is [Pig Eat Ball](https://store.steampowered.com/app/339090/Pig_Eat_Ball/).
+This is a mod/plugin for the masterpiece that is [Pig Eat Ball](https://store.steampowered.com/app/339090/Pig_Eat_Ball/).
 
 Nobody's done a speedrun of Pig Eat Ball due to its hidden gemness, so I built this plugin
 to make speedrunning it feasible and plan on being the first to try!
