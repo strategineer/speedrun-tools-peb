@@ -10,12 +10,12 @@ If through some miracle you're reading this and you decide to speedrun this game
 
 ## What does this plugin do?
 
-- Adds an autosplitter for LiveSplit with support for real time and in-game time which starts and stops appropriately according the [recommendations laid out here](https://kb.speeddemosarchive.com/Making_your_game_speedrunner-friendly#The_timer)
+- Adds an autosplitter for LiveSplit with support for real time and in-game time which starts and stops appropriately according to the [recommendations laid out here](https://kb.speeddemosarchive.com/Making_your_game_speedrunner-friendly#The_timer)
 	- for more consistent runs between players using more or less powerful PCs.
 	- to allow runners to take small health breaks during a long run.
 - Experimental menu skipping feature that skips through some menus (like the clam talking menu and the medal/pearl award menus).
 	- Useful for wasting less time sitting in menus when praticing.
-	- WARNING: this will break the story progression and prevent you from completing the game, disable it if you're planning on doing a full playthrough of the game.
+	- WARNING: this will break the story progression and prevent you from reaching the final level/boss, disable it if you're planning on doing a full playthrough of the game.
 - Cheats:
 	- Use 1-7 alphanumeric keys to load into any world.
 	- Press F5 to unlock all disguises and gain access to any world through Tube Junction.
