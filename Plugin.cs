@@ -6,15 +6,13 @@ using BepInEx.Configuration;
 using HarmonyLib;
 using System.Reflection;
 using System.Collections.Generic;
-using System.Net;
-using System.Net.Sockets;
-using System.Text;
 
 namespace com.strategineer.PEBSpeedrunTools
 {
     enum DebugTarget : int
     {
         GENERAL,
+        CURRENT_MENU,
         PLAYER_STATE,
         STORY_STATE,
         TIMER_START,
@@ -46,236 +44,13 @@ namespace com.strategineer.PEBSpeedrunTools
         STORY_STATE_GAME_ENDING1 = 100,
         STORY_STATE_GAME_ENDING2 = 110
     }
-
-   
-    class TextGUI
-    {
-        const int SCREEN_OFFSET = 10;
-        const int SHADOW_OFFSET = 2;
-
-        private string _text;
-        private GUIStyle _style = new GUIStyle();
-        private GUIStyle _shadowStyle = new GUIStyle();
-        private Rect _rect;
-        private Rect _shadowRect;
-
-        private bool _shouldShow;
-
-        private TextAnchor _anchor;
-        public TextGUI() : this(TextAnchor.UpperLeft, Color.yellow, "") { }
-        public TextGUI(TextAnchor anchor, Color color, string text)
-        {
-            _shouldShow = true;
-            _text = text;
-            _anchor = anchor;
-
-            int w = Screen.width, h = Screen.height;
-            _rect = _shadowRect = new Rect(SCREEN_OFFSET, SCREEN_OFFSET, w - SCREEN_OFFSET * 2, h - SCREEN_OFFSET * 2);
-            _shadowRect.x += SHADOW_OFFSET;
-            _shadowRect.y += SHADOW_OFFSET;
-
-            _style.fontSize = _shadowStyle.fontSize = h / 40;
-            SetAnchor(anchor);
-            SetColor(color);
-            SetShadowColor(Color.black);
-        }
-
-        public void SetColor(Color color)
-        {
-            _style.normal.textColor = color;
-        }
-        public void SetShadowColor(Color color)
-        {
-            _shadowStyle.normal.textColor = color;
-        }
-
-        public void SetAnchor(TextAnchor anchor)
-        {
-            _style.alignment = _shadowStyle.alignment = anchor;
-        }
-
-        public void SetText(string text)
-        {
-            this._text = text;
-        }
-
-        public void SetActive(bool shouldShow)
-        {
-            _shouldShow = shouldShow;
-        }
-
-        public void Draw()
-        {
-            if (_shouldShow)
-            {
-                GUI.Label(_shadowRect, _text, _shadowStyle);
-                GUI.Label(_rect, _text, _style);
-            }
-        }
-    }
-
+    // todo the menuwinscreen is a pain in the ass, it's so long, figure out a way to skip it properly
+    // todo test logic to stop the timer and end the run and display the igt at the end
     [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
     [BepInProcess("pigEatBallGame.exe")]
-    [HarmonyPatch]
-    public class Plugin : BaseUnityPlugin
+    public partial class Plugin : BaseUnityPlugin
     {
-        class AutoSplitter
-        {
-            // todo revaluate when the in-game timer should start and stop especially in menus (let's check with timo and speedrun.com, I'm sure people have discussed this)
-            // todo test special logic to stop the timer and end the run
-            // todo add code to set the story state artificially to test the last boss without playing through the whole game
-            // detect STORY_STATE_GAME_ENDING2
-            private Socket _socket;
-            private bool _hasStarted = false;
-            private bool _hasFinished = false;
-            public enum Command
-            {
-                START,
-                SPLIT,
-                PAUSE,
-                RESUME,
-                RESET,
-                INIT_GAMETIME,
-                PAUSE_GAMETIME,
-                UNPAUSE_GAMETIME
-            }
-
-            public bool IsStarted()
-            {
-                return _hasStarted;
-            }
-
-            public bool IsFinished()
-            {
-                return _hasFinished;
-            }
-
-            public void StartOrResume()
-            {
-                if (_hasFinished) return;
-                if(!_hasStarted)
-                {
-                    _hasStarted = true;
-                    Reset();
-                    SendCommand(Command.START);
-                    SendCommand(Command.INIT_GAMETIME);
-                } else
-                {
-                    UnpauseGametime();
-                }
-            }
-            public void FinishRun()
-            {
-                if (_hasFinished) return;
-                PauseGametime();
-                SendCommand(Command.PAUSE);
-                _hasFinished = true;
-
-            }
-            public void UnpauseGametime()
-            {
-                if (_hasFinished) return;
-                if (!_hasStarted) { return; }
-                SendCommand(Command.UNPAUSE_GAMETIME);
-            }
-
-            public void Split()
-            {
-                if (_hasFinished) return;
-                if (!_hasStarted) { return; }
-                SendCommand(Command.SPLIT);
-            }
-
-            public void PauseGametime()
-            {
-                if (_hasFinished) return;
-                if (!_hasStarted) { return; }
-                SendCommand(Command.PAUSE_GAMETIME);
-            }
-
-            public void Reset()
-            {
-                if (_hasFinished) return;
-                // todo I'm not sure this is working
-                SendCommand(Command.RESET);
-            }
-
-            public AutoSplitter(string ip, int port)
-            {
-                try
-                {
-                    _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                    IPAddress ipAdd = IPAddress.Parse(ip);
-                    IPEndPoint remoteEP = new IPEndPoint(ipAdd, port);
-                    _socket.Connect(remoteEP);
-                }
-                catch
-                {
-                    Log($"Can't create autosplitter with ip {ip} and port {port}");
-                    throw;
-                }
-            }
-            ~AutoSplitter()
-            {
-                if (_socket != null)
-                {
-                    _socket.Close();
-                    _socket = null;
-                }
-            }
-
-            private void SendCommand(Command command)
-            {
-                if (
-                    _socket == null
-                    || !_socket.Connected)
-                {
-                    Log("Could not send reset command to Live Split\nnot connected!");
-                    return;
-                }
-                Debug(DebugTarget.LAST_AUTOSPLITTER_COMMAND, $"{Enum.GetName(typeof(Command), command)}");
-                string msg;
-                switch (command)
-                {
-                    case Command.START:
-                        msg = "starttimer";
-                        break;
-                    case Command.SPLIT:
-                        msg = "split";
-                        break;
-                    case Command.PAUSE:
-                        msg = "pause";
-                        break;
-                    case Command.RESUME:
-                        msg = "resume";
-                        break;
-                    case Command.RESET:
-                        msg = "reset";
-                        break;
-                    case Command.INIT_GAMETIME:
-                        msg = "initgametime";
-                        break;
-                    case Command.PAUSE_GAMETIME:
-                        msg = "pausegametime";
-                        break;
-                    case Command.UNPAUSE_GAMETIME:
-                        msg = "unpausegametime";
-                        break;
-                    default:
-                        throw new Exception($"Missing command implementation {command}");
-                }
-                byte[] byData = Encoding.ASCII.GetBytes($"{msg}\r\n");
-                _socket.Send(byData);
-            }
-        }
-
-        const float FUZZ = 0.01f;
-        const float BUFFER_TO_PREVENT_LEVEL_START_MENU_SKIP_IN_MS = 1000f;
-        
-
         private static AutoSplitter _autoSplitter;
-        private static HashSet<string> _enterClamSplits = new HashSet<string>();
-        private static HashSet<string> _exitClamSplits = new HashSet<string>();
 
         private static Harmony _basicPatch = null;
         private static Harmony _timerPatch = null;
@@ -295,17 +70,18 @@ namespace com.strategineer.PEBSpeedrunTools
         private static ConfigEntry<bool> _menuSkipsPatchEnabled;
         private static ConfigEntry<bool> _basicPatchEnabled;
 
-        private static bool _gameLoaded = false;
-
         private static TextGUI _timerText = new TextGUI();
         private static Dictionary<DebugTarget, TextGUI> _debugTexts = new Dictionary<DebugTarget, TextGUI>();
         private static TextGUI _startupText = new TextGUI(TextAnchor.LowerCenter, Color.grey, $"strategineer's Pig Eat Ball Speedrun Tools version {PluginInfo.PLUGIN_VERSION} loaded.");
+
+        private static bool _gameLoaded = false;
         private static bool _gameStarted = false;
-        private static bool _overrideMenuTimerPaused = false;
+        private static bool _overrideMenuTimer = false;
         private static bool _isWarpingBetweenLevels = false;
         private static bool _isTalking = false;
         private static bool _idleOnLevelStartScreen = false;
         private static int _playerState;
+        private static int _lastStoryState;
 
         static void Log(string msg)
         {
@@ -322,7 +98,7 @@ namespace com.strategineer.PEBSpeedrunTools
             if (!speedrunTimer.IsRunning && _gameStarted)
             {
                 Debug(DebugTarget.TIMER_START, reason);
-                Debug(DebugTarget.TIMER_START_AND_STOP, reason);
+                Debug(DebugTarget.TIMER_START_AND_STOP, $"start: {reason}");
                 Log($"Starting timer because of {reason}");
                 speedrunTimer.Start();
                 if (_autoSplitter != null)
@@ -336,7 +112,7 @@ namespace com.strategineer.PEBSpeedrunTools
             if (speedrunTimer.IsRunning && _gameStarted)
             {
                 Debug(DebugTarget.TIMER_STOP, reason);
-                Debug(DebugTarget.TIMER_START_AND_STOP, reason);
+                Debug(DebugTarget.TIMER_START_AND_STOP, $"stop: {reason}");
                 Log($"Stopping timer because of {reason}");
                 speedrunTimer.Stop();
                 if (_autoSplitter != null)
@@ -352,231 +128,8 @@ namespace com.strategineer.PEBSpeedrunTools
             if (_autoSplitter != null)
             {
                 _autoSplitter.Reset();
-                _enterClamSplits.Clear();
-                _exitClamSplits.Clear();
             }
         }
-
-        [HarmonyPatch]
-        class PatchBasic
-        {
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(MidGame), "FinishBeginMainGame")]
-            static void PostfixMidGameFinishBeginMainGame()
-            {
-                _gameStarted = true;
-            }
-
-            /// <summary>
-            /// display info on my mod tools, saying that it's properly loaded here and then remove it
-            ///   when the menu changesThis starts the timer if we're on a pause menu and then we select a different button
-            /// </summary>
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(MenuStartGame), nameof(MenuStartGame.LoadContent))]
-            static void PostfixMenuStartGameLoadContent()
-            {
-                _gameLoaded = true;
-            }
-        }
-
-        [HarmonyPatch]
-        class PatchMenuSkips
-        {
-
-            /// <summary>
-            /// Just skip talking to the clam and start playing the level right away
-            /// </summary>
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(MenuClamTalkStart), nameof(MenuClamTalkStart.DoStartup))]
-            static void PostfixSkipClamTalk(ref MenuClamTalkStart __instance)
-            {
-                Log($"Skipping clam talk");
-                if (MidGame.staticMidGame.getCurrentMenu() is MenuClamTalkStart)
-                {
-                    __instance.callFunctionDelayed(13);
-                }
-            }
-
-
-            /// <summary>
-            /// Just skip the win screen and play the next level or return to the world screen if we've beaten the level
-            ///   Otherwise, let's restart the current level
-            /// </summary>
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(MenuWinScreen), nameof(MenuWinScreen.DoStartup))]
-            static void PostfixSkipWinScreen(ref MenuWinScreen __instance, bool ___singlePlayerFailure, ref int ___currentState, ref float ___currentStateTime)
-            {
-                Log("Skipping win screen");
-                ___currentStateTime = 100000f;
-                ___currentState = 42;
-                var stateNumber = ___singlePlayerFailure ? 1 : 0;
-                // stateNumber 0 to move on, stateNumber 1 to restart the current level
-                __instance.callFunction(new GenericButtonActioner(stateNumber, 0));
-            }
-        }
-
-        [HarmonyPatch]
-        class PatchInGameTimer
-        {
-
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(Player), nameof(Player.SetState))]
-            static void PrefixPlayerSetState(int ___currentState)
-            {
-                _playerState = ___currentState;
-            }
-
-            /// <summary>
-            /// Split when we enter a clam for the first time.
-            /// </summary>
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(MenuClamTalkStart), "StartPlayLevel")]
-            static void PostfixClamTalkStartPlayLevel()
-            {
-                MapTouchObj lastTouchObj = MidGame.staticMidGame.mapPlayerNew.lastTouchObj;
-                string levelName = lastTouchObj.levelNodeNames[0];
-                if (!_enterClamSplits.Contains(levelName))
-                {
-                    _enterClamSplits.Add(levelName);
-                    if (_autoSplitter != null)
-                    {
-                        _autoSplitter.Split();
-                    }
-                }
-            }
-
-
-            /// <summary>
-            /// Split when we exit a clam having won the pearl inside for the first time.
-            /// </summary>
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(MenuWinScreen), nameof(MenuWinScreen.SetState))]
-            static void PostfixMenuWinScreen(int newState)
-            {
-                if (newState == MenuWinScreen.STATE_SHUTDOWN)
-                {
-                    MapTouchObj lastTouchObj = MidGame.staticMidGame.mapPlayerNew.lastTouchObj;
-                    string levelName = lastTouchObj.levelNodeNames[0];
-                    bool wonPearl = MidGame.staticMidGame.LevelNodePearlWon(levelName);
-                    if (wonPearl && !_exitClamSplits.Contains(levelName))
-                    {
-                        _exitClamSplits.Add(levelName);
-                        if (_autoSplitter != null)
-                        {
-                            _autoSplitter.Split();
-                        }
-                    }
-                }
-            }
-
-
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(MidGame), "FinishBeginMainGame")]
-            static void PostfixMidGameFinishBeginMainGame()
-            {
-                PigEatBallGame.staticThis.gameSettings.enableLeaderboards = false;
-            }
-
-            /// <summary>
-            /// This starts the timer if we're on a pause menu and then we select a different button
-            /// </summary>
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(MenuBase), nameof(MenuBase.setCurrentButton))]
-            static void PostfixMenuPauseSetCurrentButton(MenuBase __instance, ButtonBase ___lastButton, ButtonBase ___currentButton)
-            {
-                if (
-                    __instance is MenuPause
-                    || __instance is MenuPauseInGame
-                    || __instance is MenuDisguises)
-                {
-                    if (!speedrunTimer.IsRunning
-                        && ___lastButton != null
-                        && ___currentButton != null
-                        && ___lastButton != ___currentButton)
-                    {
-                        _overrideMenuTimerPaused = true;
-                    }
-                }
-            }
-
-
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(LevelStartScreen), nameof(LevelStartScreen.SetState))]
-            static void PrefixLevelStartScreenDetectMovement(int newState)
-            {
-                if (newState == LevelStartScreen.STATE_SHOW_IDLE)
-                {
-                    _idleOnLevelStartScreen = true;
-                } else if(newState == LevelStartScreen.STATE_SHUTDOWN)
-                {
-                    _idleOnLevelStartScreen = false;
-                }
-            }
-
-            /// <summary>
-            /// This starts the timer if we're on a pause menu and go into the disguises menu
-            /// </summary>
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(MenuBase), nameof(MenuBase.setSubMenu))]
-            static void PostfixMenuPauseSetSubMenu(MenuBase __instance, MenuBase nextMenu)
-            {
-                if (!speedrunTimer.IsRunning
-                    && __instance is MenuPause
-                    && nextMenu is MenuDisguises)
-                {
-                    _overrideMenuTimerPaused = true;    
-                }
-            }
-
-            [HarmonyPrefix]
-            [HarmonyPatch(typeof(Player), nameof(Player.InterLevelWarpStart))]
-            static void PrefixInterLevelWarpStart()
-            {
-                _isWarpingBetweenLevels = true;
-            }
-
-            [HarmonyPostfix]
-            [HarmonyPatch(typeof(InterLevelWarp), "FinishLevelWarp")]
-            static void PostfixInterLevelWarpFinish()
-            {
-                _isWarpingBetweenLevels = false;
-            }
-
-            [HarmonyPrefix]
-            [HarmonyPatch(typeof(MenuCharacterTalkBase), "SetCharState")]
-            static void PrefixMenuCharacterTalkBaseSetCharState(int newState)
-            {
-                if(newState == MenuCharacterTalkBase.CHAR_STATE_START)
-                {
-                    _isTalking = true;
-                    StopTimerIfNeeded("We're talking!");
-                } else
-                {
-
-                    _isTalking = false;
-                }
-            }
-
-            [HarmonyPrefix]
-            [HarmonyPatch(typeof(MidGame), nameof(MidGame.setCurrentMenu))]
-            static void PrefixMidGameSetCurrentMenu(MenuBase _menu, ref MidGame __instance, MenuBase ___pauseMenu, MenuBase ___pauseMenuInGame, MenuBase ___startScreen, ref MenuBase ___currentMenu)
-            {
-                if (___currentMenu == ___pauseMenu
-                    || ___currentMenu == ___pauseMenuInGame)
-                {
-                    if( _menu != ___currentMenu)
-                    {
-                        _overrideMenuTimerPaused = false;
-                    }
-                }
-                if (_menu is MenuFront)
-                {
-                    ResetTimer("Back to front menu");
-                    _gameStarted = false;
-                }
-            }
-        }
-
 
         private void Awake()
         {
@@ -712,7 +265,7 @@ namespace com.strategineer.PEBSpeedrunTools
         {
             if (_menuSkipsPatchEnabled.Value)
             {
-                _menuSkipsPatch = Harmony.CreateAndPatchAll(typeof(PatchMenuSkips));
+                _menuSkipsPatch = Harmony.CreateAndPatchAll(typeof(Patches.PatchMenuSkips));
             }
             else
             {
@@ -724,7 +277,7 @@ namespace com.strategineer.PEBSpeedrunTools
             }
             if (_basicPatchEnabled.Value)
             {
-                _basicPatch = Harmony.CreateAndPatchAll(typeof(PatchBasic));
+                _basicPatch = Harmony.CreateAndPatchAll(typeof(Patches.PatchBasic));
             } else
             {
                 if(_basicPatch != null)
@@ -736,7 +289,7 @@ namespace com.strategineer.PEBSpeedrunTools
             }
             if (_timerPatchEnabled.Value)
             {
-                _timerPatch = Harmony.CreateAndPatchAll(typeof(PatchInGameTimer));
+                _timerPatch = Harmony.CreateAndPatchAll(typeof(Patches.PatchInGameTimer));
             } else
             {
                 if(_timerPatch != null)
@@ -849,13 +402,15 @@ namespace com.strategineer.PEBSpeedrunTools
                 CheckForCheats();
                 if (MidGame.playerProgress != null)
                 {
-                    if (MidGame.playerProgress.storyState == (int)StoryState.STORY_STATE_GAME_ENDING2)
+                    if (_lastStoryState == (int)StoryState.STORY_STATE_GAME_ENDING1 
+                        && MidGame.playerProgress.storyState == (int)StoryState.STORY_STATE_GAME_ENDING2)
                     {
                         if (_autoSplitter != null)
                         {
                             _autoSplitter.FinishRun();
                         }
                     }
+                    _lastStoryState = MidGame.playerProgress.storyState;
                     Debug(DebugTarget.STORY_STATE, $"{((StoryState)MidGame.playerProgress.storyState).ToString()}");
                 }
             }            
@@ -865,18 +420,19 @@ namespace com.strategineer.PEBSpeedrunTools
                 {
                     StopTimerIfNeeded("In Menu Wait State");
                 }
-                if (_idleOnLevelStartScreen
-                    || (!_isWarpingBetweenLevels
-                    && !_isTalking
-                    && _playerState != Player.STATE_MENU_WAIT
-                    && (CheckLevelGameplayRunning() || _overrideMenuTimerPaused)
-                    ))
+                else if(_idleOnLevelStartScreen)
                 {
-                    StartTimerIfNeeded("Starting timer");
+                    StartTimerIfNeeded("idle on level start screen");
+                }
+                else if(!_isWarpingBetweenLevels
+                    && !_isTalking
+                    && (CheckLevelGameplayRunning() || _overrideMenuTimer || MidGame.staticMidGame.getCurrentMenu() is MenuPearls))
+                {
+                    StartTimerIfNeeded($"warping? {_isWarpingBetweenLevels}, talking? {_isTalking}, player is in menu? {_playerState == Player.STATE_MENU_WAIT}, _overrideMenuTimer: {_overrideMenuTimer}");
                 }
                 else
                 {
-                    StopTimerIfNeeded("Stopping timer");
+                    StopTimerIfNeeded($"warping? {_isWarpingBetweenLevels}, talking? {_isTalking}, player is in menu? {_playerState == Player.STATE_MENU_WAIT}, _overrideMenuTimer: {_overrideMenuTimer}");
                 }
             }
         }
