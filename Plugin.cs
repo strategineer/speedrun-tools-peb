@@ -46,6 +46,11 @@ namespace com.strategineer.PEBSpeedrunTools
     }
     // todo the menuwinscreen is a pain in the ass, it's so long, figure out a way to skip it properly
     // todo test logic to stop the timer and end the run and display the igt at the end
+    // todo nice to have: Boss Rush mode (warp player between each of the bosses in sequence)
+    // todo nice to have: helper class to run a lambda in X frames
+    // todo nice to have: replace the playtime value in the save file with my IGT (make it display seconds if possible
+    // todo nice to have: move the inGameTimer Stopwatch into the autosplitter class, rename autosplitter to Timer and make it do its job whether or not live split is working
+    // todo nice to have: Add a realTimeAttackTimer Stopwatch into the Timer class and display it too when the game ends
     [BepInPlugin(PluginInfo.PLUGIN_GUID, PluginInfo.PLUGIN_NAME, PluginInfo.PLUGIN_VERSION)]
     [BepInProcess("pigEatBallGame.exe")]
     public partial class Plugin : BaseUnityPlugin
@@ -56,7 +61,7 @@ namespace com.strategineer.PEBSpeedrunTools
         private static Harmony _timerPatch = null;
         private static Harmony _menuSkipsPatch = null;
 
-        private static Stopwatch speedrunTimer = new Stopwatch();
+        private static Stopwatch inGameTimer = new Stopwatch();
         private static ConfigEntry<TextAnchor> _timerPosition;
         private static ConfigEntry<TextAnchor> _debugMsgPosition;
         private static ConfigEntry<bool> _showDebugText;
@@ -95,12 +100,12 @@ namespace com.strategineer.PEBSpeedrunTools
 
         static void StartTimerIfNeeded(string reason)
         {
-            if (!speedrunTimer.IsRunning && _gameStarted)
+            if (!inGameTimer.IsRunning && _gameStarted)
             {
                 Debug(DebugTarget.TIMER_START, reason);
                 Debug(DebugTarget.TIMER_START_AND_STOP, $"start: {reason}");
                 Log($"Starting timer because of {reason}");
-                speedrunTimer.Start();
+                inGameTimer.Start();
                 if (_autoSplitter != null)
                 {
                     _autoSplitter.StartOrResume();
@@ -109,12 +114,12 @@ namespace com.strategineer.PEBSpeedrunTools
         }
         static void StopTimerIfNeeded(string reason)
         {
-            if (speedrunTimer.IsRunning && _gameStarted)
+            if (inGameTimer.IsRunning && _gameStarted)
             {
                 Debug(DebugTarget.TIMER_STOP, reason);
                 Debug(DebugTarget.TIMER_START_AND_STOP, $"stop: {reason}");
                 Log($"Stopping timer because of {reason}");
-                speedrunTimer.Stop();
+                inGameTimer.Stop();
                 if (_autoSplitter != null)
                 {
                     _autoSplitter.PauseGametime();
@@ -124,7 +129,7 @@ namespace com.strategineer.PEBSpeedrunTools
         static void ResetTimer(string reason)
         {
             Log($"Resetting timer because of {reason}");
-            speedrunTimer.Reset();
+            inGameTimer.Reset();
             if (_autoSplitter != null)
             {
                 _autoSplitter.Reset();
@@ -441,7 +446,7 @@ namespace com.strategineer.PEBSpeedrunTools
         {
             if (_gameLoaded)
             {
-                TimeSpan ts = speedrunTimer.Elapsed;
+                TimeSpan ts = inGameTimer.Elapsed;
                 if (_autoSplitter != null
                     && _autoSplitter.IsFinished())
                 {
@@ -458,7 +463,7 @@ namespace com.strategineer.PEBSpeedrunTools
                         ts.Minutes, ts.Seconds,
                         ts.Milliseconds / 10);
                     }
-                    _timerText.SetColor(speedrunTimer.IsRunning ? Color.green : Color.grey);
+                    _timerText.SetColor(inGameTimer.IsRunning ? Color.green : Color.grey);
                     _timerText.SetText(elapsedTime);
                     _timerText.Draw();
                 }

@@ -131,7 +131,7 @@ namespace com.strategineer.PEBSpeedrunTools
                         || __instance is MenuPauseInGame
                         || __instance is MenuDisguises)
                     {
-                        if (!speedrunTimer.IsRunning
+                        if (!inGameTimer.IsRunning
                             && ___lastButton != null
                             && ___currentButton != null
                             && ___lastButton != ___currentButton)
@@ -163,7 +163,7 @@ namespace com.strategineer.PEBSpeedrunTools
                 [HarmonyPatch(typeof(MenuBase), nameof(MenuBase.setSubMenu))]
                 static void PostfixMenuPauseSetSubMenu(MenuBase __instance, MenuBase nextMenu)
                 {
-                    if (!speedrunTimer.IsRunning
+                    if (!inGameTimer.IsRunning
                         && __instance is MenuPause
                         && nextMenu is MenuDisguises)
                     {
@@ -219,7 +219,7 @@ namespace com.strategineer.PEBSpeedrunTools
                     if (_menu is MenuStartGame)
                     {
                         _gameStarted = false;
-                        if (!speedrunTimer.IsRunning)
+                        if (!inGameTimer.IsRunning)
                         {
                             ResetTimer("Arrived at front menu");
                         }
