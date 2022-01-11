@@ -15,6 +15,7 @@ namespace com.strategineer.PEBSpeedrunTools
     enum DebugTarget : int
     {
         GENERAL,
+        PLAYER_STATE,
         STORY_STATE,
         TIMER_START,
         TIMER_STOP,
@@ -304,6 +305,7 @@ namespace com.strategineer.PEBSpeedrunTools
         private static bool _isWarpingBetweenLevels = false;
         private static bool _isTalking = false;
         private static bool _idleOnLevelStartScreen = false;
+        private static int _playerState;
 
         static void Log(string msg)
         {
@@ -320,10 +322,13 @@ namespace com.strategineer.PEBSpeedrunTools
             if (!speedrunTimer.IsRunning && _gameStarted)
             {
                 Debug(DebugTarget.TIMER_START, reason);
-                Debug(DebugTarget.TIMER_START_AND_STOP, reason);                
+                Debug(DebugTarget.TIMER_START_AND_STOP, reason);
                 Log($"Starting timer because of {reason}");
                 speedrunTimer.Start();
-                _autoSplitter.StartOrResume();
+                if (_autoSplitter != null)
+                {
+                    _autoSplitter.StartOrResume();
+                }
             }
         }
         static void StopTimerIfNeeded(string reason)
@@ -334,14 +339,22 @@ namespace com.strategineer.PEBSpeedrunTools
                 Debug(DebugTarget.TIMER_START_AND_STOP, reason);
                 Log($"Stopping timer because of {reason}");
                 speedrunTimer.Stop();
-                _autoSplitter.PauseGametime();
+                if (_autoSplitter != null)
+                {
+                    _autoSplitter.PauseGametime();
+                }
             }
         }
         static void ResetTimer(string reason)
         {
             Log($"Resetting timer because of {reason}");
             speedrunTimer.Reset();
-            _autoSplitter.Reset();
+            if (_autoSplitter != null)
+            {
+                _autoSplitter.Reset();
+                _enterClamSplits.Clear();
+                _exitClamSplits.Clear();
+            }
         }
 
         [HarmonyPatch]
@@ -405,6 +418,14 @@ namespace com.strategineer.PEBSpeedrunTools
         [HarmonyPatch]
         class PatchInGameTimer
         {
+
+            [HarmonyPostfix]
+            [HarmonyPatch(typeof(Player), nameof(Player.SetState))]
+            static void PrefixPlayerSetState(int ___currentState)
+            {
+                _playerState = ___currentState;
+            }
+
             /// <summary>
             /// Split when we enter a clam for the first time.
             /// </summary>
@@ -417,7 +438,10 @@ namespace com.strategineer.PEBSpeedrunTools
                 if (!_enterClamSplits.Contains(levelName))
                 {
                     _enterClamSplits.Add(levelName);
-                    _autoSplitter.Split();
+                    if (_autoSplitter != null)
+                    {
+                        _autoSplitter.Split();
+                    }
                 }
             }
 
@@ -437,7 +461,10 @@ namespace com.strategineer.PEBSpeedrunTools
                     if (wonPearl && !_exitClamSplits.Contains(levelName))
                     {
                         _exitClamSplits.Add(levelName);
-                        _autoSplitter.Split();
+                        if (_autoSplitter != null)
+                        {
+                            _autoSplitter.Split();
+                        }
                     }
                 }
             }
@@ -816,6 +843,7 @@ namespace com.strategineer.PEBSpeedrunTools
 
         private void Update()
         {
+            Debug(DebugTarget.PLAYER_STATE, $"{_playerState}");
             if (_basicPatchEnabled.Value)
             {
                 CheckForCheats();
@@ -823,16 +851,24 @@ namespace com.strategineer.PEBSpeedrunTools
                 {
                     if (MidGame.playerProgress.storyState == (int)StoryState.STORY_STATE_GAME_ENDING2)
                     {
-                        _autoSplitter.FinishRun();
+                        if (_autoSplitter != null)
+                        {
+                            _autoSplitter.FinishRun();
+                        }
                     }
                     Debug(DebugTarget.STORY_STATE, $"{((StoryState)MidGame.playerProgress.storyState).ToString()}");
                 }
             }            
             if (_timerPatchEnabled.Value)
             {
+                if(_playerState == Player.STATE_MENU_WAIT)
+                {
+                    StopTimerIfNeeded("In Menu Wait State");
+                }
                 if (_idleOnLevelStartScreen
                     || (!_isWarpingBetweenLevels
                     && !_isTalking
+                    && _playerState != Player.STATE_MENU_WAIT
                     && (CheckLevelGameplayRunning() || _overrideMenuTimerPaused)
                     ))
                 {
@@ -850,7 +886,8 @@ namespace com.strategineer.PEBSpeedrunTools
             if (_gameLoaded)
             {
                 TimeSpan ts = speedrunTimer.Elapsed;
-                if (_autoSplitter.IsFinished())
+                if (_autoSplitter != null
+                    && _autoSplitter.IsFinished())
                 {
                     string elapsedTime;
                     if (ts.Hours > 0)
